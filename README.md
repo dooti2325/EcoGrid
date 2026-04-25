@@ -1,6 +1,12 @@
+---
+title: EcoGrid OpenEnv
+emoji: 🌍
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_port: 7860
+---
 # ⚡ EcoGrid-OpenEnv
-
-![OpenEnv Status](https://img.shields.io/badge/OpenEnv-Valid-brightgreen)
 ![Hackathon](https://img.shields.io/badge/Scaler_SoT_×_Meta_PyTorch-Finale-blue)
 
 **EcoGrid-OpenEnv** is a production-grade Reinforcement Learning environment for the OpenEnv framework. It simulates sustainable energy grid management where an AI agent must balance renewable sources, fossil fuels, and battery storage to meet demand while minimising cost and carbon emissions.
