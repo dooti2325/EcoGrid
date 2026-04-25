@@ -4,7 +4,7 @@ emoji: ??
 colorFrom: blue
 colorTo: green
 sdk: gradio
-sdk_version: 5.29.0
+sdk_version: 6.13.0
 app_file: app.py
 pinned: false
 ---
@@ -30,11 +30,11 @@ A modular reinforcement learning project for adaptive traffic signal control.
 ```
 
 ## Project modules
-- `traffic_rl/env` — environment and traffic dynamics
-- `traffic_rl/reward` — reward engineering
-- `traffic_rl/baseline` — fixed-time baseline
-- `traffic_rl/agent` — DQN + replay buffer
-- `traffic_rl/training` — training loop
-- `traffic_rl/evaluation` — metric comparison
-- `traffic_rl/visualization` — plotting dashboard
-- `traffic_rl/skills` — modular wrappers
+- `traffic_rl/env` - environment and traffic dynamics
+- `traffic_rl/reward` - reward engineering
+- `traffic_rl/baseline` - fixed-time baseline
+- `traffic_rl/agent` - DQN + replay buffer
+- `traffic_rl/training` - training loop
+- `traffic_rl/evaluation` - metric comparison
+- `traffic_rl/visualization` - plotting dashboard
+- `traffic_rl/skills` - modular wrappers
