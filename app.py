@@ -125,89 +125,109 @@ with st.sidebar:
         st.session_state.cumulative_reward = 0.0
 
 # ── Main UI ──
-st.title("EcoGrid-OpenEnv Dashboard")
-st.markdown("RL Environment for Sustainable Energy Grid Management. (Scaler × Meta Hackathon)")
+st.title("⚡ EcoGrid-OpenEnv Dashboard")
+st.markdown("Reinforcement Learning Environment for Sustainable Energy Grid Management. *(Scaler × Meta Hackathon)*")
+st.markdown("---")
 
 col_live, col_reward, col_emissions = st.columns(3)
 
 # Panel 1: Live Grid State
 with col_live:
-    st.subheader("Live Grid State")
-    state = st.session_state.state
-    
-    st.metric("Timestep", f"{state.time_step} / {st.session_state.env.get_task_config(st.session_state.current_task)['episode_length']}")
-    
-    # Battery Gauge
-    fig = go.Figure(go.Indicator(
-        mode = "gauge+number",
-        value = state.battery_level * 100,
-        title = {'text': "Battery Level %"},
-        gauge = {'axis': {'range': [0, 100]}, 'bar': {'color': "green"}}
-    ))
-    fig.update_layout(height=200, margin=dict(l=10, r=10, t=30, b=10))
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Capacity Bars
-    fig2 = go.Figure(data=[
-        go.Bar(name='Demand (MWh)', x=['Demand'], y=[state.demand], marker_color='red'),
-        go.Bar(name='Solar Cap', x=['Solar'], y=[state.solar_capacity * 100], marker_color='orange'),
-        go.Bar(name='Wind Cap', x=['Wind'], y=[state.wind_capacity * 100], marker_color='blue')
-    ])
-    fig2.update_layout(height=250, margin=dict(l=10, r=10, t=10, b=10), barmode='group')
-    st.plotly_chart(fig2, use_container_width=True)
+    with st.container(border=True):
+        st.subheader("📡 Live Grid State")
+        state = st.session_state.state
+        
+        st.metric("Timestep", f"{state.time_step} / {st.session_state.env.get_task_config(st.session_state.current_task)['episode_length']}")
+        
+        # Battery Gauge
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = state.battery_level * 100,
+            title = {'text': "Battery Level (%)", 'font': {'size': 14}},
+            gauge = {'axis': {'range': [0, 100]}, 'bar': {'color': "#00cc96"}, 'bgcolor': "rgba(0,0,0,0)"}
+        ))
+        fig.update_layout(height=200, margin=dict(l=20, r=20, t=40, b=20))
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        
+        # Capacity Bars
+        fig2 = go.Figure(data=[
+            go.Bar(name='Demand', x=['Demand'], y=[state.demand], marker_color='#ef553b'),
+            go.Bar(name='Solar', x=['Solar'], y=[state.solar_capacity * 100], marker_color='#ffa15a'),
+            go.Bar(name='Wind', x=['Wind'], y=[state.wind_capacity * 100], marker_color='#636efa')
+        ])
+        fig2.update_layout(height=220, margin=dict(l=20, r=20, t=20, b=20), barmode='group', showlegend=False)
+        st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
 
 
 # Panel 2: Reward Over Time
 with col_reward:
-    st.subheader("Agent Performance")
-    
-    if st.session_state.history:
-        df = pd.DataFrame(st.session_state.history)
+    with st.container(border=True):
+        st.subheader("📈 Agent Performance")
         
-        # Current Episode Reward
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(x=df['step'], y=df['reward'], mode='lines+markers', name='Total Reward'))
-        fig3.update_layout(title="Step Reward", height=200, margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig3, use_container_width=True)
-        
-        # Breakdown
-        fig4 = go.Figure()
-        fig4.add_trace(go.Scatter(x=df['step'], y=df['cost_score'], name='Cost Score'))
-        fig4.add_trace(go.Scatter(x=df['step'], y=df['carbon_score'], name='Carbon Score'))
-        fig4.add_trace(go.Scatter(x=df['step'], y=df['stability_score'], name='Stability Score'))
-        fig4.update_layout(title="Reward Breakdown", height=250, margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig4, use_container_width=True)
-    else:
-        st.info("Step the environment to see performance charts.")
+        if st.session_state.history:
+            df = pd.DataFrame(st.session_state.history)
+            
+            # Current Episode Reward
+            fig3 = go.Figure()
+            fig3.add_trace(go.Scatter(x=df['step'], y=df['reward'], mode='lines', fill='tozeroy', name='Reward', line=dict(color='#ab63fa', width=3)))
+            fig3.update_layout(title="Step Reward", height=200, margin=dict(l=20, r=20, t=40, b=20), xaxis_title="Step", yaxis_title="Reward (0-1)")
+            st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
+            
+            # Breakdown
+            fig4 = go.Figure()
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['cost_score'], name='Cost', line=dict(dash='dot')))
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['carbon_score'], name='Carbon', line=dict(dash='dash')))
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['stability_score'], name='Stability'))
+            fig4.update_layout(title="Reward Breakdown", height=220, margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig4, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("Press '▶ Step' or '⏭ Run Episode' in the sidebar to see performance charts.")
+            for _ in range(12): st.empty() # padding to match height
 
 # Panel 3: Emissions & Training
 with col_emissions:
-    st.subheader("Training & Emissions")
-    
-    # Carbon Budget Gauge
-    max_budget = st.session_state.env.get_task_config(st.session_state.current_task)['carbon_budget']
-    current_budget = state.carbon_budget_remaining
-    
-    fig5 = go.Figure(go.Indicator(
-        mode = "gauge+number",
-        value = current_budget,
-        title = {'text': "Carbon Budget (kgCO2)"},
-        gauge = {
-            'axis': {'range': [0, max_budget]},
-            'bar': {'color': "darkred" if current_budget < max_budget * 0.2 else "green"},
-            'steps': [
-                {'range': [0, max_budget * 0.2], 'color': "lightcoral"}
-            ]
-        }
-    ))
-    fig5.update_layout(height=200, margin=dict(l=10, r=10, t=30, b=10))
-    st.plotly_chart(fig5, use_container_width=True)
-    
-    # RL Training Curve
-    st.markdown("**GRPO Training Progress (Unsloth)**")
-    curve_data = load_or_mock_reward_curve()
-    df_curve = pd.DataFrame(curve_data)
-    fig6 = go.Figure()
-    fig6.add_trace(go.Scatter(x=df_curve['step'], y=df_curve['reward'], mode='lines', line=dict(color='purple', width=3)))
-    fig6.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Training Steps", yaxis_title="Avg Reward")
-    st.plotly_chart(fig6, use_container_width=True)
+    with st.container(border=True):
+        st.subheader("🌍 Emissions & Training")
+        
+        # Carbon Budget Gauge
+        max_budget = st.session_state.env.get_task_config(st.session_state.current_task)['carbon_budget']
+        current_budget = state.carbon_budget_remaining
+        
+        fig5 = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = current_budget,
+            title = {'text': "Carbon Budget (kgCO2)", 'font': {'size': 14}},
+            number = {'valueformat': ".0f"},
+            gauge = {
+                'axis': {'range': [0, max_budget]},
+                'bar': {'color': "#19d3f3" if current_budget > max_budget * 0.2 else "#ef553b"},
+                'steps': [
+                    {'range': [0, max_budget * 0.2], 'color': "rgba(239, 85, 59, 0.2)"}
+                ]
+            }
+        ))
+        fig5.update_layout(height=200, margin=dict(l=20, r=20, t=40, b=20))
+        st.plotly_chart(fig5, use_container_width=True, config={'displayModeBar': False})
+        
+        # RL Training Curve
+        st.markdown("**🧠 GRPO Training Progress (Unsloth)**")
+        curve_data = load_or_mock_reward_curve()
+        df_curve = pd.DataFrame(curve_data)
+        fig6 = go.Figure()
+        fig6.add_trace(go.Scatter(x=df_curve['step'], y=df_curve['reward'], mode='lines', line=dict(color='#00cc96', width=3)))
+        fig6.update_layout(height=180, margin=dict(l=20, r=20, t=10, b=20), xaxis_title="Training Steps", yaxis_title="Avg Reward")
+        st.plotly_chart(fig6, use_container_width=True, config={'displayModeBar': False})
+
+# Global styling tweaks for clean padding
+st.markdown("""
+    <style>
+    div[data-testid="stMetric"] {
+        background-color: rgba(128, 128, 128, 0.05);
+        padding: 10px 15px;
+        border-radius: 8px;
+    }
+    div[data-testid="stDecoration"] {
+        display: none;
+    }
+    </style>
+""", unsafe_allow_html=True)
