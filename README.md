@@ -1,6 +1,6 @@
----
+﻿---
 title: RL Traffic Intelligence
-emoji: ??
+emoji: 📈
 colorFrom: blue
 colorTo: green
 sdk: gradio
