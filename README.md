@@ -1,3 +1,15 @@
+---
+language: en
+tags:
+- reinforcement-learning
+- dqn
+- traffic-control
+- pytorch
+license: mit
+library_name: pytorch
+pipeline_tag: reinforcement-learning
+---
+
 # RL-Based Adaptive Traffic Intelligence System
 
 A modular, production-style Reinforcement Learning project for adaptive traffic signal control.
@@ -8,6 +20,11 @@ Traffic control is treated as a sequential decision-making problem. An agent sel
 - minimize queue length
 - maximize throughput
 - prioritize emergency vehicles
+
+## Hugging Face Model Artifacts
+- `artifacts/dqn_state_dict.pt` (trained DQN weights)
+- `artifacts/model_config.json` (environment/training config snapshot)
+- `artifacts/model_metrics.json` (evaluation snapshot)
 
 ## Highlights
 - OpenEnv-style deterministic environment (`TrafficEnv`)
@@ -61,6 +78,17 @@ Use the project-local virtual environment.
 .\.venv\Scripts\python.exe run_demo.py --episodes 70 --eval-episodes 20 --output-dir outputs
 ```
 
+## Load Saved Weights
+```python
+import torch
+from traffic_rl.agent.dqn_agent import DQNAgent
+
+agent = DQNAgent(state_dim=10, action_dim=3)
+state_dict = torch.load("artifacts/dqn_state_dict.pt", map_location="cpu")
+agent.q_network.load_state_dict(state_dict)
+agent.sync_target()
+```
+
 ## Demo Pipeline
 The demo performs:
 1. fixed baseline simulation
@@ -76,7 +104,7 @@ Artifacts are saved to `outputs/`:
 - `fixed_trajectory.png`
 - `rl_trajectory.png`
 
-## Measured Results (Latest Run)
+## Measured Results (Demo Run)
 From `outputs/metrics_summary.json`:
 
 ### Baseline vs RL

@@ -1,0 +1,27 @@
+{
+  "max_steps": 120,
+  "arrival_mode": "stochastic",
+  "lane_bias": [
+    1.6,
+    0.8,
+    1.4,
+    0.6
+  ],
+  "peak_rates": [
+    3.8,
+    2.2,
+    3.4,
+    1.5
+  ],
+  "offpeak_rates": [
+    1.4,
+    0.9,
+    1.2,
+    0.7
+  ],
+  "peak_duration": 35,
+  "cycle_duration": 60,
+  "service_rate": 2,
+  "ambulance_spawn_prob": 0.08,
+  "seed": 42
+}
