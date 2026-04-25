@@ -51,7 +51,7 @@ class GridState(BaseModel):
     )
     carbon_budget_remaining: float = Field(
         ...,
-        ge=-100,  # Allow slight overrun for detection
+        ge=-100000,  # Allow large overrun for detection before termination
         le=1000,
         description="Remaining carbon emission budget in kgCO2",
     )
