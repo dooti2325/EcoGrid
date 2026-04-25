@@ -1,22 +1,7 @@
-# Byte-compiled / cache
+logs/
+lora_adapter/
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-
-# Environments and local tooling
-.venv/
-.venv_bootstrap/
-.virtualenv_appdata/
-.tmp/
-
-# Test/build artifacts
+*.pyc
+venv/
+.env
 .pytest_cache/
-.cache/
-
-# Output artifacts
-outputs/
-
-# IDE
-.vscode/
-.idea/
