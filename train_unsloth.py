@@ -23,8 +23,8 @@ except ImportError:
 from env.environment import EcoGridEnv
 from models.schemas import GridAction
 
-# Use a small, efficient model suitable for HF Spaces / free tier
-MODEL_NAME = "unsloth/Qwen2.5-1.5B-Instruct"
+# Default to a small model, but allow override
+DEFAULT_MODEL = "unsloth/Qwen2.5-1.5B-Instruct"
 MAX_SEQ_LENGTH = 1024
 LORA_RANK = 16
 
@@ -119,6 +119,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--samples", type=int, default=200)
     parser.add_argument("--seed", type=int, default=3407)
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Model path/name")
     args = parser.parse_args()
     
     if not HAS_UNSLOTH:
@@ -126,11 +127,11 @@ def main():
         print("Install: pip install unsloth trl datasets")
         return
         
-    print(f"Initializing Unsloth GRPO training on {MODEL_NAME}")
+    print(f"Initializing Unsloth GRPO training on {args.model}")
     
     # 1. Load Model
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=MODEL_NAME,
+        model_name=args.model,
         max_seq_length=MAX_SEQ_LENGTH,
         dtype=None,  # Auto detection
         load_in_4bit=True,

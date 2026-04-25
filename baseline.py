@@ -22,6 +22,83 @@ from env.environment import EcoGridEnv
 from env.tasks import BasicGridBalanceGrader, RenewableVariabilityGrader, CarbonConstrainedGrader
 from models.schemas import GridAction, GridState
 
+_trained_model = None
+_trained_tokenizer = None
+
+def load_trained_model():
+    """Lazily load the LoRA model if available."""
+    global _trained_model, _trained_tokenizer
+    if _trained_model is not None:
+        return _trained_model, _trained_tokenizer
+        
+    if not os.path.exists("./lora_adapter/adapter_config.json"):
+        return None, None
+        
+    print("Loading LoRA adapter...")
+    try:
+        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+        from peft import PeftModel
+        import torch
+        
+        with open("./lora_adapter/adapter_config.json", "r") as f:
+            peft_config = json.load(f)
+        base_model_name = peft_config.get("base_model_name_or_path", "unsloth/Qwen2.5-1.5B-Instruct")
+        
+        _trained_tokenizer = AutoTokenizer.from_pretrained("./lora_adapter")
+        
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        if device == "cuda":
+            quant_config = BitsAndBytesConfig(load_in_4bit=True)
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
+                quantization_config=quant_config,
+                device_map="auto"
+            )
+        else:
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
+                device_map="cpu",
+                torch_dtype=torch.float32
+            )
+            
+        _trained_model = PeftModel.from_pretrained(base_model, "./lora_adapter")
+        print("LoRA successfully loaded!")
+        return _trained_model, _trained_tokenizer
+    except Exception as e:
+        print(f"Failed to load LoRA: {e}")
+        return None, None
+
+def local_llm_agent(state: GridState, task_name: str) -> GridAction:
+    """Agent that runs inference using the locally trained LoRA."""
+    model, tokenizer = load_trained_model()
+    if model is None:
+        print("No LoRA found, falling back to heuristic.")
+        return heuristic_agent(state, task_name)
+        
+    state_json = state.model_dump_json(indent=2)
+    prompt = f"You are an expert energy grid operator.\nYour goal is to balance renewable energy, fossil fuels, and battery storage to meet demand while minimising cost and carbon emissions.\n\nCURRENT STATE:\n{state_json}\n\nTASK: {task_name}\nCONSTRAINTS: \n- renewable_ratio + fossil_ratio <= 1.0\n- battery_action must be between -1.0 (discharge) and 1.0 (charge)\n\nOutput ONLY a valid JSON object:\n{{\n  \"renewable_ratio\": float,\n  \"fossil_ratio\": float,\n  \"battery_action\": float\n}}"
+    
+    try:
+        # Standard chat template formatting
+        messages = [{"role": "user", "content": prompt}]
+        inputs = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
+        
+        outputs = model.generate(inputs, max_new_tokens=100, temperature=0.1, do_sample=True)
+        content = tokenizer.decode(outputs[0][inputs.shape[-1]:], skip_special_tokens=True).strip()
+        
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+            
+        data = json.loads(content)
+        return GridAction(**data)
+    except Exception as e:
+        print(f"Local LLM Error: {e}. Falling back to heuristic.")
+        return heuristic_agent(state, task_name)
+
+
 
 def heuristic_agent(state: GridState, task_name: str) -> GridAction:
     """A hardcoded baseline agent that performs reasonably well."""

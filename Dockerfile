@@ -12,6 +12,8 @@ COPY requirements.txt .
 # Create a virtual environment and install dependencies
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+# Install PyTorch CPU first to keep image size small
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Runtime

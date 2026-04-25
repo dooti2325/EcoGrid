@@ -15,10 +15,17 @@ import os
 
 from env.environment import EcoGridEnv
 from models.schemas import GridAction
-from baseline import heuristic_agent
+from baseline import heuristic_agent, local_llm_agent, load_trained_model
 
 # Use wide mode
 st.set_page_config(page_title="EcoGrid RL Environment", layout="wide")
+
+@st.cache_resource
+def init_llm_model():
+    """Load the LLM once into memory and cache it."""
+    load_trained_model()
+
+init_llm_model()
 
 # Mock the trained agent's reward curve if the file exists, otherwise generate a fake one
 # to ensure the judges always see an improvement curve.
@@ -46,14 +53,8 @@ def random_agent(state) -> GridAction:
     return GridAction(renewable_ratio=ren, fossil_ratio=foss, battery_action=bat)
 
 def trained_agent(state) -> GridAction:
-    # A slightly better heuristic to simulate a trained model
-    action = heuristic_agent(state, st.session_state.current_task)
-    # Tweak it to be a bit more optimal
-    return GridAction(
-        renewable_ratio=min(1.0, action.renewable_ratio + 0.05),
-        fossil_ratio=max(0.0, action.fossil_ratio - 0.05),
-        battery_action=action.battery_action
-    )
+    # Uses the real LLM inference if LoRA is available!
+    return local_llm_agent(state, st.session_state.current_task)
 
 def init_session():
     if "env" not in st.session_state:
