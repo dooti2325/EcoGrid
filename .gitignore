@@ -1,0 +1,22 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Environments and local tooling
+.venv/
+.venv_bootstrap/
+.virtualenv_appdata/
+.tmp/
+
+# Test/build artifacts
+.pytest_cache/
+.cache/
+
+# Output artifacts
+outputs/
+
+# IDE
+.vscode/
+.idea/
