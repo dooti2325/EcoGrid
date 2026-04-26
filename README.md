@@ -1,3 +1,12 @@
+---
+title: EcoGrid OpenEnv
+emoji: 🌍
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_port: 7860
+---
+
 # EcoGrid OpenEnv
 
 Production-ready RL environment and API for sustainable grid control.
