@@ -17,7 +17,7 @@ COPY . .
 EXPOSE 7860
 
 # Health check
-HEALTHCHECK CMD curl --fail http://localhost:7860/health || exit 1
+HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7860/health', timeout=5).read()" || exit 1
 
 # Run the FastAPI server via uv
 CMD ["uv", "run", "--project", ".", "server", "--port", "7860", "--host", "0.0.0.0"]

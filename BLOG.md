@@ -37,4 +37,6 @@ We've deployed a live interactive dashboard where you can watch random agents, s
 
 [Check out the interactive EcoGrid Dashboard on Hugging Face Spaces](https://huggingface.co/spaces/Loosebag/EcoGrid)
 
+[GitHub repository](https://github.com/dooti2325/EcoGrid)
+
 *Built by Team DD.*

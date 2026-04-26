@@ -39,7 +39,7 @@ def test_blackout_penalty():
     
     assert breakdown["stability_score"] == 0.0
     assert breakdown["penalty"] >= 0.5 # Blackout penalty
-    assert reward == 0.0 # Clipped to 0
+    assert reward == 0.001 # Clipped to the environment's minimum positive reward
 
 def test_carbon_penalty():
     state = get_dummy_state()
@@ -51,4 +51,4 @@ def test_carbon_penalty():
     reward, breakdown = compute_reward(state, action, next_state, task_config)
     
     assert breakdown["penalty"] >= 0.8
-    assert reward == 0.0
+    assert reward == 0.001
