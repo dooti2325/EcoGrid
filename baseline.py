@@ -11,12 +11,12 @@ import os
 import time
 from typing import Literal
 
-# Try importing openai, handle gracefully if not installed
+# Try importing litellm for OpenEnv proxy validation
 try:
-    from openai import OpenAI
-    HAS_OPENAI = True
+    import litellm
+    HAS_LITELLM = True
 except ImportError:
-    HAS_OPENAI = False
+    HAS_LITELLM = False
 
 from env.environment import EcoGridEnv
 from env.tasks import BasicGridBalanceGrader, RenewableVariabilityGrader, CarbonConstrainedGrader
@@ -141,7 +141,7 @@ def heuristic_agent(state: GridState, task_name: str) -> GridAction:
     )
 
 
-def llm_agent(state: GridState, task_name: str, client: "OpenAI") -> GridAction:
+def llm_agent(state: GridState, task_name: str) -> GridAction:
     """An agent that uses an LLM to make decisions via Chain-of-Thought."""
     
     prompt = f"""
@@ -168,7 +168,7 @@ Then, output ONLY a valid JSON object matching this schema, with no markdown fen
 """
     
     try:
-        response = client.chat.completions.create(
+        response = litellm.completion(
             model="gpt-4o",  # Using best model as requested
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
@@ -190,60 +190,88 @@ Then, output ONLY a valid JSON object matching this schema, with no markdown fen
 
 
 def main():
+    from rich.console import Console
+    from rich.table import Table
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+
+    console = Console()
+    
     parser = argparse.ArgumentParser(description="EcoGrid-OpenEnv Baseline Inference")
     parser.add_argument("--task", type=str, choices=["easy", "medium", "hard"], default="easy")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--agent", type=str, choices=["heuristic", "llm"], default="heuristic")
     args = parser.parse_args()
     
-    if args.agent == "llm" and not HAS_OPENAI:
-        print("Error: openai package not installed. Run: pip install openai")
+    if args.agent == "llm" and not HAS_LITELLM:
+        console.print("[bold red]Error:[/bold red] litellm package not installed. Run: pip install litellm")
         return
         
     if args.agent == "llm" and not os.environ.get("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY environment variable not set. Falling back to heuristic.")
+        console.print("[bold yellow]Warning:[/bold yellow] OPENAI_API_KEY environment variable not set. Falling back to heuristic.")
         args.agent = "heuristic"
         
-    client = OpenAI() if args.agent == "llm" else None
-    
     # Initialize environment
-    print(f"Initializing EcoGridEnv for task: {args.task} (seed={args.seed})")
+    console.print(f"[bold blue]Initializing EcoGridEnv for task:[/bold blue] {args.task} (seed={args.seed})")
     env = EcoGridEnv()
     state = env.reset(task=args.task, seed=args.seed)
     
     start_time = time.time()
     total_reward = 0.0
     
-    print("\nStarting episode...")
-    print(f"{'Step':<5} | {'Demand':<8} | {'Renw Ratio':<10} | {'Foss Ratio':<10} | {'Blackout':<8} | {'Reward':<6}")
-    print("-" * 65)
+    console.print("\n[bold green]Starting episode...[/bold green]")
     
-    while not env.is_done:
-        if args.agent == "llm":
-            action = llm_agent(state, args.task, client)
-        else:
-            action = heuristic_agent(state, args.task)
-            
-        try:
-            result = env.step(action)
-        except ValueError as e:
-            # Handle constraint violations (e.g. ratios > 1.0)
-            print(f"Action constraint violation: {e}. Falling back to safe action.")
-            safe_action = GridAction(renewable_ratio=0.5, fossil_ratio=0.5, battery_action=0.0)
-            result = env.step(safe_action)
-            
-        state = result.observation
-        total_reward += result.reward
-        
-        # Print progress every 10 steps or at the end
-        if env.current_step % 10 == 0 or env.is_done:
-            print(f"{env.current_step:<5} | "
-                  f"{state.demand:<8.1f} | "
-                  f"{action.renewable_ratio:<10.2f} | "
-                  f"{action.fossil_ratio:<10.2f} | "
-                  f"{result.info.get('blackout_risk', 0.0):<8.2f} | "
-                  f"{result.reward:<6.2f}")
+    table = Table(title="Live Grid Simulation", show_header=True, header_style="bold magenta")
+    table.add_column("Step", style="dim", width=6)
+    table.add_column("Demand", justify="right")
+    table.add_column("Renw Ratio", justify="right")
+    table.add_column("Foss Ratio", justify="right")
+    table.add_column("Blackout", justify="right")
+    table.add_column("Reward", justify="right", style="green")
+    
+    episode_length = env.get_task_config(args.task)["episode_length"]
 
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True
+    ) as progress:
+        sim_task = progress.add_task("[cyan]Simulating grid...", total=episode_length)
+        
+        while not env.is_done:
+            if args.agent == "llm":
+                action = llm_agent(state, args.task)
+            else:
+                action = heuristic_agent(state, args.task)
+                
+            try:
+                result = env.step(action)
+            except ValueError as e:
+                console.print(f"[bold yellow]Action constraint violation:[/bold yellow] {e}. Falling back to safe action.")
+                safe_action = GridAction(renewable_ratio=0.5, fossil_ratio=0.5, battery_action=0.0)
+                result = env.step(safe_action)
+                
+            state = result.observation
+            total_reward += result.reward
+            
+            # Print progress every 10 steps or at the end
+            if env.current_step % 10 == 0 or env.is_done:
+                table.add_row(
+                    str(env.current_step),
+                    f"{state.demand:.1f}",
+                    f"{action.renewable_ratio:.2f}",
+                    f"{action.fossil_ratio:.2f}",
+                    f"{result.info.get('blackout_risk', 0.0):.2f}",
+                    f"{result.reward:.2f}"
+                )
+                
+            progress.update(sim_task, advance=1)
+            time.sleep(0.01) # slight delay to render progress smoothly for small baselines
+
+    console.print(table)
     elapsed = time.time() - start_time
     
     # Grade the episode
@@ -255,21 +283,28 @@ def main():
     else:
         score = CarbonConstrainedGrader.grade(log)
         
-    print("\n" + "="*50)
-    print("EPISODE COMPLETE")
-    print("="*50)
-    print(f"Task: {args.task}")
-    print(f"Agent: {args.agent}")
-    print(f"Steps: {env.current_step}")
-    print(f"Time: {elapsed:.2f}s ({env.current_step/elapsed:.0f} steps/sec)")
+    console.print("\n[bold]==================================================[/bold]")
+    console.print("[bold cyan]EPISODE COMPLETE[/bold cyan]")
+    console.print("[bold]==================================================[/bold]")
+    console.print(f"Task: [bold]{args.task}[/bold]")
+    console.print(f"Agent: [bold]{args.agent}[/bold]")
+    console.print(f"Steps: {env.current_step}")
+    console.print(f"Time: {elapsed:.2f}s ({env.current_step/elapsed:.0f} steps/sec)")
     if log:
-        print(f"Termination: {log[-1].info.get('termination_reason', 'unknown')}")
+        console.print(f"Termination: [bold]{log[-1].info.get('termination_reason', 'unknown')}[/bold]")
         
-    print("\nFINAL SCORE:")
-    print(f"{score.score * 100:.1f} / 100.0")
-    print("\nScore Breakdown:")
+    console.print("\n[bold green]FINAL SCORE:[/bold green]")
+    console.print(f"[bold text]{score.score * 100:.1f} / 100.0[/bold text]")
+    console.print("\n[bold]Score Breakdown:[/bold]")
+    
+    breakdown_table = Table(show_header=False, box=None)
+    breakdown_table.add_column("Metric", style="cyan")
+    breakdown_table.add_column("Value", justify="right")
+    
     for k, v in score.breakdown.items():
-        print(f"  {k}: {v:.4f}")
+        breakdown_table.add_row(k.replace('_', ' ').title(), f"{v:.4f}")
+    
+    console.print(breakdown_table)
 
 if __name__ == "__main__":
     main()

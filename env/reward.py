@@ -101,7 +101,7 @@ def compute_reward(
         penalties += 0.8
 
     # ── 4. Final Calculation ──
-    final_reward = float(np.clip(weighted_sum - penalties, 0.0, 1.0))
+    final_reward = float(np.clip(weighted_sum - penalties, 0.001, 0.999))
 
     breakdown = {
         "cost_score": float(cost_score),

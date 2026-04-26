@@ -126,16 +126,19 @@ with st.sidebar:
         st.session_state.cumulative_reward = 0.0
 
 # ── Main UI ──
-st.title("⚡ EcoGrid-OpenEnv Dashboard")
-st.markdown("Reinforcement Learning Environment for Sustainable Energy Grid Management. *(Scaler × Meta Hackathon)*")
-st.markdown("---")
+st.markdown("""
+<div class="main-header">
+    <h1>🌍 EcoGrid <span class="highlight">OpenEnv</span></h1>
+    <p>Production-Grade RL Environment for Sustainable Energy Grid Management</p>
+</div>
+""", unsafe_allow_html=True)
 
 col_live, col_reward, col_emissions = st.columns(3)
 
 # Panel 1: Live Grid State
 with col_live:
     with st.container(border=True):
-        st.subheader("📡 Live Grid State")
+        st.markdown("<div class="panel-title">📡 Live Grid State</div>", unsafe_allow_html=True)
         state = st.session_state.state
         
         st.metric("Timestep", f"{state.time_step} / {st.session_state.env.get_task_config(st.session_state.current_task)['episode_length']}")
@@ -144,42 +147,52 @@ with col_live:
         fig = go.Figure(go.Indicator(
             mode = "gauge+number",
             value = state.battery_level * 100,
-            title = {'text': "Battery Level (%)", 'font': {'size': 14}},
-            gauge = {'axis': {'range': [0, 100]}, 'bar': {'color': "#00cc96"}, 'bgcolor': "rgba(0,0,0,0)"}
+            title = {'text': "Battery Level (%)", 'font': {'size': 13, 'color': '#a0aec0'}},
+            gauge = {
+                'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#4a5568"},
+                'bar': {'color': "#38b2ac"},
+                'bgcolor': "rgba(0,0,0,0)",
+                'borderwidth': 0,
+                'steps': [
+                    {'range': [0, 20], 'color': 'rgba(229, 62, 62, 0.2)'},
+                    {'range': [20, 80], 'color': 'rgba(56, 178, 172, 0.1)'},
+                    {'range': [80, 100], 'color': 'rgba(72, 187, 120, 0.2)'}
+                ]
+            }
         ))
-        fig.update_layout(height=200, margin=dict(l=20, r=20, t=40, b=20))
+        fig.update_layout(height=180, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color': '#e2e8f0'})
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         
         # Capacity Bars
         fig2 = go.Figure(data=[
-            go.Bar(name='Demand', x=['Demand'], y=[state.demand], marker_color='#ef553b'),
-            go.Bar(name='Solar', x=['Solar'], y=[state.solar_capacity * 100], marker_color='#ffa15a'),
-            go.Bar(name='Wind', x=['Wind'], y=[state.wind_capacity * 100], marker_color='#636efa')
+            go.Bar(name='Demand', x=['Demand'], y=[state.demand], marker_color='#e53e3e', marker_line_width=0, opacity=0.9),
+            go.Bar(name='Solar', x=['Solar'], y=[state.solar_capacity * 100], marker_color='#ecc94b', marker_line_width=0, opacity=0.9),
+            go.Bar(name='Wind', x=['Wind'], y=[state.wind_capacity * 100], marker_color='#4299e1', marker_line_width=0, opacity=0.9)
         ])
-        fig2.update_layout(height=220, margin=dict(l=20, r=20, t=20, b=20), barmode='group', showlegend=False)
+        fig2.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=20), barmode='group', showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(gridcolor="#2d3748"))
         st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
 
 
 # Panel 2: Reward Over Time
 with col_reward:
     with st.container(border=True):
-        st.subheader("📈 Agent Performance")
+        st.markdown("<div class="panel-title">📈 Agent Performance</div>", unsafe_allow_html=True)
         
         if st.session_state.history:
             df = pd.DataFrame(st.session_state.history)
             
             # Current Episode Reward
             fig3 = go.Figure()
-            fig3.add_trace(go.Scatter(x=df['step'], y=df['reward'], mode='lines', fill='tozeroy', name='Reward', line=dict(color='#ab63fa', width=3)))
-            fig3.update_layout(title="Step Reward", height=200, margin=dict(l=20, r=20, t=40, b=20), xaxis_title="Step", yaxis_title="Reward (0-1)")
+            fig3.add_trace(go.Scatter(x=df['step'], y=df['reward'], mode='lines', fill='tozeroy', name='Reward', line=dict(color='#9f7aea', width=3), fillcolor='rgba(159, 122, 234, 0.2)'))
+            fig3.update_layout(title=dict(text="Step Reward", font=dict(color="#a0aec0", size=13)), height=180, margin=dict(l=10, r=10, t=30, b=10), xaxis_title="Step", yaxis_title="Reward (0-1)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
             st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
             
             # Breakdown
             fig4 = go.Figure()
-            fig4.add_trace(go.Scatter(x=df['step'], y=df['cost_score'], name='Cost', line=dict(dash='dot')))
-            fig4.add_trace(go.Scatter(x=df['step'], y=df['carbon_score'], name='Carbon', line=dict(dash='dash')))
-            fig4.add_trace(go.Scatter(x=df['step'], y=df['stability_score'], name='Stability'))
-            fig4.update_layout(title="Reward Breakdown", height=220, margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['cost_score'], name='Cost', line=dict(dash='dot', color='#f6e05e', width=2)))
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['carbon_score'], name='Carbon', line=dict(dash='dash', color='#68d391', width=2)))
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['stability_score'], name='Stability', line=dict(color='#63b3ed', width=2)))
+            fig4.update_layout(title=dict(text="Reward Breakdown", font=dict(color="#a0aec0", size=13)), height=200, margin=dict(l=10, r=10, t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#e2e8f0")), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
             st.plotly_chart(fig4, use_container_width=True, config={'displayModeBar': False})
         else:
             st.info("Press '▶ Step' or '⏭ Run Episode' in the sidebar to see performance charts.")
@@ -188,7 +201,7 @@ with col_reward:
 # Panel 3: Emissions & Training
 with col_emissions:
     with st.container(border=True):
-        st.subheader("🌍 Emissions & Training")
+        st.markdown("<div class="panel-title">🌍 Emissions & Training</div>", unsafe_allow_html=True)
         
         # Carbon Budget Gauge
         max_budget = st.session_state.env.get_task_config(st.session_state.current_task)['carbon_budget']
@@ -197,38 +210,146 @@ with col_emissions:
         fig5 = go.Figure(go.Indicator(
             mode = "gauge+number",
             value = current_budget,
-            title = {'text': "Carbon Budget (kgCO2)", 'font': {'size': 14}},
-            number = {'valueformat': ".0f"},
+            title = {'text': "Carbon Budget (kgCO2)", 'font': {'size': 13, 'color': '#a0aec0'}},
+            number = {'valueformat': ".0f", 'font': {'color': '#e2e8f0'}},
             gauge = {
-                'axis': {'range': [0, max_budget]},
-                'bar': {'color': "#19d3f3" if current_budget > max_budget * 0.2 else "#ef553b"},
+                'axis': {'range': [0, max_budget], 'tickwidth': 1, 'tickcolor': "#4a5568"},
+                'bar': {'color': "#48bb78" if current_budget > max_budget * 0.2 else "#e53e3e"},
+                'bgcolor': "rgba(0,0,0,0)",
+                'borderwidth': 0,
                 'steps': [
-                    {'range': [0, max_budget * 0.2], 'color': "rgba(239, 85, 59, 0.2)"}
+                    {'range': [0, max_budget * 0.2], 'color': "rgba(229, 62, 62, 0.2)"}
                 ]
             }
         ))
-        fig5.update_layout(height=200, margin=dict(l=20, r=20, t=40, b=20))
+        fig5.update_layout(height=180, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color': '#e2e8f0'})
         st.plotly_chart(fig5, use_container_width=True, config={'displayModeBar': False})
         
         # RL Training Curve
-        st.markdown("**🧠 GRPO Training Progress (Unsloth)**")
+        st.markdown("<div style='font-size: 13px; color: #a0aec0; margin-top: 10px; margin-bottom: -10px;'>🧠 GRPO Training Progress (Unsloth)</div>", unsafe_allow_html=True)
         curve_data = load_or_mock_reward_curve()
         df_curve = pd.DataFrame(curve_data)
         fig6 = go.Figure()
-        fig6.add_trace(go.Scatter(x=df_curve['step'], y=df_curve['reward'], mode='lines', line=dict(color='#00cc96', width=3)))
-        fig6.update_layout(height=180, margin=dict(l=20, r=20, t=10, b=20), xaxis_title="Training Steps", yaxis_title="Avg Reward")
+        fig6.add_trace(go.Scatter(x=df_curve['step'], y=df_curve['reward'], mode='lines', line=dict(color='#38b2ac', width=3)))
+        fig6.update_layout(height=180, margin=dict(l=10, r=10, t=10, b=20), xaxis_title="Training Steps", yaxis_title="Avg Reward", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
         st.plotly_chart(fig6, use_container_width=True, config={'displayModeBar': False})
 
-# Global styling tweaks for clean padding
+st.markdown("""
+<div class="footer">
+    EcoGrid OpenEnv — Hackathon Finale Submission
+</div>
+""", unsafe_allow_html=True)
+
+# Global styling tweaks for clean padding and professional glassmorphism look
 st.markdown("""
     <style>
-    div[data-testid="stMetric"] {
-        background-color: rgba(128, 128, 128, 0.05);
-        padding: 10px 15px;
-        border-radius: 8px;
+    /* Main Background & Fonts */
+    .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1a202c 100%);
+        color: #e2e8f0;
+        font-family: 'Inter', sans-serif;
     }
+    
+    /* Header Styling */
+    .main-header {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 1.5rem 2rem;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    .main-header h1 {
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(90deg, #38b2ac, #4299e1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .main-header .highlight {
+        color: #e2e8f0;
+        -webkit-text-fill-color: #e2e8f0;
+    }
+    .main-header p {
+        margin: 0.5rem 0 0 0;
+        color: #a0aec0;
+        font-size: 1.1rem;
+    }
+    
+    /* Panel Containers (Glassmorphism) */
+    [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+        background: rgba(26, 32, 44, 0.6) !important;
+        backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 16px !important;
+        padding: 1.5rem !important;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    /* Panel Titles */
+    .panel-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #e2e8f0;
+        margin-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Metrics */
+    div[data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 15px 20px;
+        border-radius: 12px;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        font-weight: 700 !important;
+        color: #38b2ac !important;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #1a202c !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .stButton>button {
+        background: linear-gradient(135deg, #38b2ac 0%, #319795 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        transition: all 0.2s;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(135deg, #4fd1c5 0%, #38b2ac 100%);
+        box-shadow: 0 4px 12px rgba(56, 178, 172, 0.3);
+        transform: translateY(-1px);
+    }
+    
+    /* Hide Decorations */
     div[data-testid="stDecoration"] {
         display: none;
+    }
+    
+    /* Footer */
+    .footer {
+        text-align: center;
+        padding: 2rem 0;
+        color: #718096;
+        font-size: 0.9rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        margin-top: 3rem;
     }
     </style>
 """, unsafe_allow_html=True)
