@@ -2,14 +2,13 @@
 EcoGrid-OpenEnv — Streamlit Dashboard
 
 A 3-panel interactive dashboard for visualizing the RL environment, 
-demonstrating the difference between random, heuristic, and (mock) trained agents.
+demonstrating the difference between random, heuristic, and trained agents.
 Designed for HuggingFace Spaces.
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import time
 import json
 import os
 
@@ -27,23 +26,14 @@ def init_llm_model():
 
 init_llm_model()
 
-# Mock the trained agent's reward curve if the file exists, otherwise generate a fake one
-# to ensure the judges always see an improvement curve.
-def load_or_mock_reward_curve():
+def load_reward_curve():
     try:
         if os.path.exists("./logs/reward_curve.json"):
             with open("./logs/reward_curve.json", "r") as f:
                 return json.load(f)
     except:
         pass
-    
-    # Mock data showing RL learning progress
-    curve = []
-    for i in range(100):
-        base = 0.2 + (0.6 * (1 - 2.718**(-i/20))) # Exponential learning curve
-        noise = (hash(str(i)) % 100) / 1000.0
-        curve.append({"step": i*10, "reward": min(1.0, base + noise)})
-    return curve
+    return []
 
 def random_agent(state) -> GridAction:
     import random
@@ -138,7 +128,7 @@ col_live, col_reward, col_emissions = st.columns(3)
 # Panel 1: Live Grid State
 with col_live:
     with st.container(border=True):
-        st.markdown("<div class="panel-title">📡 Live Grid State</div>", unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">📡 Live Grid State</div>', unsafe_allow_html=True)
         state = st.session_state.state
         
         st.metric("Timestep", f"{state.time_step} / {st.session_state.env.get_task_config(st.session_state.current_task)['episode_length']}")
@@ -176,7 +166,7 @@ with col_live:
 # Panel 2: Reward Over Time
 with col_reward:
     with st.container(border=True):
-        st.markdown("<div class="panel-title">📈 Agent Performance</div>", unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">📈 Agent Performance</div>', unsafe_allow_html=True)
         
         if st.session_state.history:
             df = pd.DataFrame(st.session_state.history)
@@ -201,7 +191,7 @@ with col_reward:
 # Panel 3: Emissions & Training
 with col_emissions:
     with st.container(border=True):
-        st.markdown("<div class="panel-title">🌍 Emissions & Training</div>", unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">🌍 Emissions & Training</div>', unsafe_allow_html=True)
         
         # Carbon Budget Gauge
         max_budget = st.session_state.env.get_task_config(st.session_state.current_task)['carbon_budget']
@@ -227,12 +217,15 @@ with col_emissions:
         
         # RL Training Curve
         st.markdown("<div style='font-size: 13px; color: #a0aec0; margin-top: 10px; margin-bottom: -10px;'>🧠 GRPO Training Progress (Unsloth)</div>", unsafe_allow_html=True)
-        curve_data = load_or_mock_reward_curve()
-        df_curve = pd.DataFrame(curve_data)
-        fig6 = go.Figure()
-        fig6.add_trace(go.Scatter(x=df_curve['step'], y=df_curve['reward'], mode='lines', line=dict(color='#38b2ac', width=3)))
-        fig6.update_layout(height=180, margin=dict(l=10, r=10, t=10, b=20), xaxis_title="Training Steps", yaxis_title="Avg Reward", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
-        st.plotly_chart(fig6, use_container_width=True, config={'displayModeBar': False})
+        curve_data = load_reward_curve()
+        if curve_data:
+            df_curve = pd.DataFrame(curve_data)
+            fig6 = go.Figure()
+            fig6.add_trace(go.Scatter(x=df_curve['step'], y=df_curve['reward'], mode='lines', line=dict(color='#38b2ac', width=3)))
+            fig6.update_layout(height=180, margin=dict(l=10, r=10, t=10, b=20), xaxis_title="Training Steps", yaxis_title="Avg Reward", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
+            st.plotly_chart(fig6, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.image("docs/reward_curve.png", caption="GRPO reward curve from the submitted training run")
 
 st.markdown("""
 <div class="footer">

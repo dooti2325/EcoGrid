@@ -35,6 +35,8 @@ Instead of a learned critic model, we use the EcoGrid environment itself as the 
 
 We've deployed a live interactive dashboard where you can watch random agents, smart heuristics, and trained models battle the grid volatility in real-time.
 
-[Check out the interactive EcoGrid Dashboard on Hugging Face Spaces](#)
+[Check out the interactive EcoGrid Dashboard on Hugging Face Spaces](https://huggingface.co/spaces/Loosebag/EcoGrid)
+
+[GitHub repository](https://github.com/dooti2325/EcoGrid)
 
 *Built by Team DD.*

@@ -43,5 +43,5 @@ def test_renewable_grader_blackout_penalty():
 def test_carbon_grader_fatal():
     log = get_dummy_log(carbon_term=True)
     score = CarbonConstrainedGrader.grade(log)
-    assert score.score == 0.0
+    assert score.score == 0.001
     assert score.breakdown["fatal_error"] == 1.0

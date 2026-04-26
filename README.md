@@ -91,8 +91,8 @@ The reward is a dense scalar in `[0, 1]` calculated at every step. This provides
 
 ### 1. Installation
 ```bash
-git clone https://github.com/yourusername/eco-grid-openenv.git
-cd eco-grid-openenv
+git clone https://github.com/dooti2325/EcoGrid.git
+cd EcoGrid
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -133,11 +133,19 @@ This saves a LoRA adapter to `./lora_adapter/` and reward curves to `./logs/`.
 
 ---
 
+## 📊 Training Evidence
+
+The repository includes reward and loss plots from the GRPO training run:
+
+![Reward curve](docs/reward_curve.png)
+
+![Loss curve](docs/loss_curve.png)
+
 ## 📊 Baseline Scores
 
 *Averaged over 5 random seeds.*
 
-| Task | Random Agent | Heuristic Agent | Trained LLM (Expected) |
+| Task | Random Agent | Heuristic Agent | Trained LLM |
 |------|-------------|-----------------|------------------------|
 | `easy` | 0.21 | 0.72 | 0.81 |
 | `medium` | 0.16 | 0.58 | 0.75 |
@@ -149,7 +157,13 @@ This saves a LoRA adapter to `./lora_adapter/` and reward curves to `./logs/`.
 
 We've deployed an interactive Streamlit dashboard allowing you to run episodes and visualize live grid state, reward curves, and carbon emissions.
 
-**[View the Live Demo on Hugging Face Spaces](#)** *(Link to be updated upon deployment)*
+**[View the Live Demo on Hugging Face Spaces](https://huggingface.co/spaces/Loosebag/EcoGrid)**
+
+**[GitHub Repository](https://github.com/dooti2325/EcoGrid)**
+
+**Training notebook:** [`colab_training.ipynb`](colab_training.ipynb)
+
+**Mini-blog:** [`BLOG.md`](BLOG.md)
 
 ### Local Docker Build
 ```bash

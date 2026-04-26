@@ -27,7 +27,7 @@ from models.schemas import GridAction, GridState
 # The validator checks that all LLM calls flow through API_BASE_URL.
 # -------------------------------------------------------------------
 API_BASE_URL: str = os.environ["API_BASE_URL"]
-API_KEY: str = os.environ["API_KEY"]
+API_KEY: str = os.environ.get("API_KEY") or os.environ["HF_TOKEN"]
 MODEL_NAME: str = os.environ.get("MODEL_NAME", "gpt-4o")
 BENCHMARK: str = os.environ.get("BENCHMARK", "eco-grid-openenv")
 
