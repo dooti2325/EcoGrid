@@ -22,6 +22,12 @@ try:
 except ImportError:
     HAS_UNSLOTH = False
 
+try:
+    import wandb
+    HAS_WANDB = True
+except ImportError:
+    HAS_WANDB = False
+
 from env.environment import EcoGridEnv
 from models.schemas import GridAction
 
@@ -150,6 +156,13 @@ def main():
     print(f"Initializing Unsloth GRPO training on {args.model}")
     set_global_seed(args.seed)
     
+    if HAS_WANDB:
+        wandb.init(
+            project="ecogrid-openenv", 
+            name=f"grpo-{args.task}-{args.model.split('/')[-1]}",
+            config=vars(args)
+        )
+    
     # 1. Load Model
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=args.model,
@@ -237,7 +250,7 @@ def main():
         num_generations=4, # Number of completions to generate per prompt for relative scoring
         save_steps=100,
         logging_steps=10,
-        report_to="none", # We will save our own logs
+        report_to="wandb" if HAS_WANDB else "none", # W&B tracking
     )
     
     trainer = GRPOTrainer(
@@ -251,6 +264,9 @@ def main():
     # 5. Train
     print("Starting GRPO training...")
     trainer.train()
+    
+    if HAS_WANDB:
+        wandb.finish()
     
     # 6. Save
     print("Training complete. Saving LoRA adapter...")
