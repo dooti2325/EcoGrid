@@ -30,10 +30,10 @@ Safety constraint:
 
 ## 2) Runtime Modes
 
-- API mode (default deployment): `python -m server.app`
-- Dashboard mode (optional local demo): `streamlit run app.py`
+- Dashboard mode (HF deployment): `streamlit run app.py`
+- API mode (local/service): `python -m server.app`
 
-HF Space Docker deployment uses API mode.
+HF Space Docker deployment serves the Streamlit dashboard.
 
 ## 3) Install
 
