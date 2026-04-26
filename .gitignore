@@ -19,3 +19,4 @@ venv/
 pytest-cache-files-*/
 .uv-cache/
 *.egg-info/
+.hf_space_temp/
