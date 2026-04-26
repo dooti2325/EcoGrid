@@ -21,10 +21,11 @@ st.set_page_config(page_title="EcoGrid RL Environment", layout="wide")
 
 @st.cache_resource
 def init_llm_model():
-    """Load the LLM once into memory and cache it."""
-    load_trained_model()
+    """Load the LoRA model once and return availability."""
+    model, _ = load_trained_model()
+    return model is not None
 
-init_llm_model()
+TRAINED_AVAILABLE = init_llm_model()
 
 def load_reward_curve():
     try:
@@ -98,7 +99,18 @@ with st.sidebar:
         st.session_state.history = []
         st.session_state.cumulative_reward = 0.0
         
-    agent = st.radio("Select Agent", ["Random", "Heuristic", "Trained (LoRA)"], index=1)
+    agent_options = ["Random", "Heuristic"]
+    if TRAINED_AVAILABLE:
+        agent_options.append("Trained (LoRA)")
+    agent = st.radio("Select Agent", agent_options, index=1)
+    if not TRAINED_AVAILABLE:
+        st.warning(
+            "Trained (LoRA) is unavailable in this deployment, so only Random/Heuristic are active.",
+            icon="⚠️",
+        )
+        st.caption(
+            "Why: missing LoRA runtime artifacts or missing training deps (transformers/peft/torch) in the Space image."
+        )
     
     col1, col2 = st.columns(2)
     with col1:
@@ -122,6 +134,11 @@ st.markdown("""
     <p>Production-Grade RL Environment for Sustainable Energy Grid Management</p>
 </div>
 """, unsafe_allow_html=True)
+
+if TRAINED_AVAILABLE:
+    st.success("Trained LoRA model loaded successfully.", icon="✅")
+else:
+    st.info("Running in baseline mode (no active trained LoRA in this Space build).", icon="ℹ️")
 
 col_live, col_reward, col_emissions = st.columns(3)
 
