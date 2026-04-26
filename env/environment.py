@@ -11,7 +11,6 @@ import numpy as np
 from typing import Literal, Optional
 
 from models.schemas import GridState, GridAction, StepResult, TaskConfig
-from env.action_utils import coerce_grid_action
 from env.dynamics import (
     solar_output,
     wind_output,
@@ -39,9 +38,6 @@ TASK_CONFIGS = {
         demand_volatility=0.2,
         carbon_strict=False,
         volatility_multiplier=1.0,
-        fossil_ramp_limit=1.0,
-        battery_charge_efficiency=0.95,
-        battery_discharge_efficiency=0.95,
         description="Stable solar, flat demand, no battery. Goal: minimise cost.",
     ),
     "medium": TaskConfig(
@@ -54,9 +50,6 @@ TASK_CONFIGS = {
         demand_volatility=1.0,
         carbon_strict=False,
         volatility_multiplier=1.0,
-        fossil_ramp_limit=0.35,
-        battery_charge_efficiency=0.94,
-        battery_discharge_efficiency=0.94,
         description="Noisy solar+wind, demand spikes, small battery. Goal: avoid blackouts.",
     ),
     "hard": TaskConfig(
@@ -69,9 +62,6 @@ TASK_CONFIGS = {
         demand_volatility=1.5,
         carbon_strict=True,        # Episode ends on overrun
         volatility_multiplier=2.0, # 2× noise on renewables
-        fossil_ramp_limit=0.22,
-        battery_charge_efficiency=0.93,
-        battery_discharge_efficiency=0.93,
         description="Strict carbon cap, high volatility, limited storage. Episode ends on overrun.",
     ),
 }
@@ -105,7 +95,6 @@ class EcoGridEnv:
         self._episode_log: list[StepResult] = []
         self._previous_wind: float = 0.4
         self._previous_stability: float = 0.9
-        self._previous_fossil_ratio: float = 0.0
 
     def reset(
         self,
@@ -128,7 +117,6 @@ class EcoGridEnv:
         self._episode_log = []
         self._previous_wind = 0.4
         self._previous_stability = 0.9
-        self._previous_fossil_ratio = 0.0
 
         # Generate initial state
         config = self._task_config
@@ -155,7 +143,7 @@ class EcoGridEnv:
         )
         return self._state
 
-    def step(self, action: GridAction | dict) -> StepResult:
+    def step(self, action: GridAction) -> StepResult:
         """Execute one timestep of the environment.
 
         Args:
@@ -176,15 +164,6 @@ class EcoGridEnv:
         assert config is not None
         assert self._rng is not None
 
-        action, action_warning = coerce_grid_action(
-            action_like=action,
-            default_action=GridAction(
-                renewable_ratio=0.5,
-                fossil_ratio=0.5,
-                battery_action=0.0,
-            ),
-        )
-
         self._step_count += 1
         prev_state = self._state
         effective_noise = config.noise_level * config.volatility_multiplier
@@ -201,13 +180,7 @@ class EcoGridEnv:
         )
 
         # ── Compute supply from agent's action ──
-        (
-            renewable_supply,
-            fossil_supply,
-            battery_supply,
-            total_supply,
-            effective_fossil_ratio,
-        ) = compute_supply(
+        renewable_supply, fossil_supply, battery_supply, total_supply = compute_supply(
             action.renewable_ratio,
             action.fossil_ratio,
             action.battery_action,
@@ -216,26 +189,20 @@ class EcoGridEnv:
             prev_state.battery_level,
             config.battery_capacity,
             prev_state.demand,
-            previous_fossil_ratio=self._previous_fossil_ratio,
-            fossil_ramp_limit=config.fossil_ramp_limit,
-            discharge_efficiency=config.battery_discharge_efficiency,
         )
-        self._previous_fossil_ratio = effective_fossil_ratio
 
         # ── Update battery ──
         new_battery = update_battery(
             prev_state.battery_level,
             action.battery_action,
             config.battery_capacity,
-            charge_efficiency=config.battery_charge_efficiency,
-            discharge_efficiency=config.battery_discharge_efficiency,
         )
 
         # ── Compute blackout risk ──
         blackout = compute_blackout_risk(prev_state.demand, total_supply)
 
         # ── Compute carbon emissions ──
-        emissions = carbon_emission(effective_fossil_ratio, prev_state.demand)
+        emissions = carbon_emission(action.fossil_ratio, prev_state.demand)
         new_carbon = prev_state.carbon_budget_remaining - emissions
 
         # ── Compute grid stability ──
@@ -266,19 +233,7 @@ class EcoGridEnv:
 
         # ── Compute reward ──
         reward, breakdown = compute_reward(
-            prev_state,
-            action,
-            next_state,
-            config.model_dump(),
-            actual_supply=(
-                renewable_supply,
-                fossil_supply,
-                battery_supply,
-                total_supply,
-                effective_fossil_ratio,
-            ),
-            actual_blackout_risk=blackout,
-            actual_emissions=emissions,
+            prev_state, action, next_state, config.model_dump()
         )
 
         # ── Check termination conditions ──
@@ -303,10 +258,7 @@ class EcoGridEnv:
             "blackout_risk": round(blackout, 4),
             "carbon_emitted_step": round(emissions, 2),
             "termination_reason": termination_reason,
-            "effective_fossil_ratio": round(effective_fossil_ratio, 4),
         }
-        if action_warning:
-            info["action_warning"] = action_warning
 
         result = StepResult(
             observation=next_state,

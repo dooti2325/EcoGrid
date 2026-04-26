@@ -7,3 +7,8 @@ plotly>=5.18.0
 openai>=1.10.0
 litellm>=1.0.0
 rich>=13.0.0
+# trl, unsloth, torch are heavy and omitted for the web dashboard deployment
+# they should be installed locally for training
+transformers>=4.40.0
+peft>=0.11.0
+accelerate>=0.30.0

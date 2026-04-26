@@ -9,62 +9,42 @@ import argparse
 import json
 import os
 import time
-from pathlib import Path
 from typing import Literal
 
-HAS_LITELLM = None
+# Try importing litellm for OpenEnv proxy validation
+try:
+    import litellm
+    HAS_LITELLM = True
+except ImportError:
+    HAS_LITELLM = False
 
 from env.environment import EcoGridEnv
 from env.tasks import BasicGridBalanceGrader, RenewableVariabilityGrader, CarbonConstrainedGrader
-from env.action_utils import safe_grid_action
 from models.schemas import GridAction, GridState
 
 _trained_model = None
 _trained_tokenizer = None
-_trained_load_attempted = False
-TASK_EPISODE_LENGTH = {"easy": 48, "medium": 96, "hard": 96}
-FOSSIL_EMISSION_FACTOR = 0.5
-LORA_DIR = Path(os.environ.get("LORA_ADAPTER_DIR", str(Path(__file__).resolve().parent / "lora_adapter"))).resolve()
-
-
-def _get_litellm():
-    """Lazily import litellm to avoid startup-time network side effects."""
-    global HAS_LITELLM
-    if HAS_LITELLM is False:
-        return None
-    try:
-        import litellm
-
-        HAS_LITELLM = True
-        return litellm
-    except ImportError:
-        HAS_LITELLM = False
-        return None
 
 def load_trained_model():
     """Lazily load the LoRA model if available."""
-    global _trained_model, _trained_tokenizer, _trained_load_attempted
+    global _trained_model, _trained_tokenizer
     if _trained_model is not None:
         return _trained_model, _trained_tokenizer
-    if _trained_load_attempted:
+        
+    if not os.path.exists("./lora_adapter/adapter_config.json"):
         return None, None
         
-    adapter_config_path = LORA_DIR / "adapter_config.json"
-    if not adapter_config_path.exists():
-        return None, None
-        
-    print(f"Loading LoRA adapter from {LORA_DIR} ...")
-    _trained_load_attempted = True
+    print("Loading LoRA adapter...")
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
         from peft import PeftModel
         import torch
         
-        with adapter_config_path.open("r", encoding="utf-8") as f:
+        with open("./lora_adapter/adapter_config.json", "r") as f:
             peft_config = json.load(f)
         base_model_name = peft_config.get("base_model_name_or_path", "unsloth/Qwen2.5-1.5B-Instruct")
         
-        _trained_tokenizer = AutoTokenizer.from_pretrained(str(LORA_DIR))
+        _trained_tokenizer = AutoTokenizer.from_pretrained("./lora_adapter")
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         
@@ -82,7 +62,7 @@ def load_trained_model():
                 torch_dtype=torch.float32
             )
             
-        _trained_model = PeftModel.from_pretrained(base_model, str(LORA_DIR))
+        _trained_model = PeftModel.from_pretrained(base_model, "./lora_adapter")
         print("LoRA successfully loaded!")
         return _trained_model, _trained_tokenizer
     except Exception as e:
@@ -113,95 +93,56 @@ def local_llm_agent(state: GridState, task_name: str) -> GridAction:
             content = content[3:-3]
             
         data = json.loads(content)
-        return safe_grid_action(
-            renewable_ratio=data.get("renewable_ratio", 0.5),
-            fossil_ratio=data.get("fossil_ratio", 0.5),
-            battery_action=data.get("battery_action", 0.0),
-        )
+        return GridAction(**data)
     except Exception as e:
         print(f"Local LLM Error: {e}. Falling back to heuristic.")
         return heuristic_agent(state, task_name)
 
 
 
-def _constraint_aware_hard_controller(state: GridState) -> GridAction:
-    """Hard-mode controller that enforces carbon budget pacing."""
-    remaining_steps = max(1, TASK_EPISODE_LENGTH["hard"] - state.time_step)
-    avg_renewable_cap = (state.solar_capacity + state.wind_capacity) / 2.0
-    avg_renewable_cap = min(1.0, max(0.0, avg_renewable_cap))
-
-    # Budget-aware fossil cap:
-    # carbon_per_step = fossil_ratio * demand * emission_factor
-    # => fossil_ratio <= carbon_budget_remaining / (remaining_steps * demand * emission_factor)
-    if state.demand > 0:
-        budget_fossil_cap = state.carbon_budget_remaining / (
-            remaining_steps * state.demand * FOSSIL_EMISSION_FACTOR
-        )
-    else:
-        budget_fossil_cap = 0.0
-
-    # Keep a safety margin to avoid late-episode budget collapse.
-    budget_fossil_cap = max(0.0, min(0.14, budget_fossil_cap * 0.92))
-    future_floor = remaining_steps * max(state.demand, 1.0) * FOSSIL_EMISSION_FACTOR * 0.08
-    if state.grid_stability < 0.75 and state.carbon_budget_remaining > future_floor:
-        budget_fossil_cap = min(0.18, budget_fossil_cap + 0.03)
-
-    renewable_ratio = min(0.9, max(0.62, avg_renewable_cap + 0.12))
-    fossil_ratio = min(max(0.02, 1.0 - renewable_ratio), budget_fossil_cap)
-
-    # Battery dispatch policy:
-    # - discharge on high demand or low stability
-    # - charge when demand is light and stability is healthy
-    if (state.demand > 100 or state.grid_stability < 0.8) and state.battery_level > 0.12:
-        battery_action = -0.9
-    elif state.demand < 78 and state.battery_level < 0.7 and avg_renewable_cap > 0.4:
-        battery_action = 0.6
-    else:
-        battery_action = 0.0
-
-    return safe_grid_action(
-        renewable_ratio=renewable_ratio,
-        fossil_ratio=fossil_ratio,
-        battery_action=battery_action,
-    )
-
-
 def heuristic_agent(state: GridState, task_name: str) -> GridAction:
-    """Constraint-aware baseline agent with strict action validity guarantees."""
-    if task_name == "hard":
-        return _constraint_aware_hard_controller(state)
-
+    """A hardcoded baseline agent that performs reasonably well."""
+    # Always max out renewables available
     avg_renewable_cap = (state.solar_capacity + state.wind_capacity) / 2.0
-    avg_renewable_cap = min(1.0, max(0.0, avg_renewable_cap))
-    renewable_ratio = min(0.95, max(0.05, avg_renewable_cap))
-    fossil_ratio = max(0.0, 1.0 - avg_renewable_cap)
-
-    if task_name == "medium" and (state.grid_stability < 0.8 or state.demand > 105):
-        fossil_ratio = min(1.0, fossil_ratio + 0.05)
-
-    if state.demand > 100 and state.battery_level > 0.2:
-        battery_action = -0.9
-        if task_name == "medium":
-            fossil_ratio = max(0.0, fossil_ratio - 0.05)
-    elif state.demand < 70 and state.battery_level < 0.8 and avg_renewable_cap > 0.5:
-        battery_action = 0.7
-        if task_name == "medium":
-            fossil_ratio = min(1.0, fossil_ratio + 0.03)
+    
+    # Try to meet demand with renewables first
+    if state.demand > 0:
+        renewable_ratio = min(1.0, avg_renewable_cap / max(0.01, state.demand/100))
+        renewable_ratio = min(renewable_ratio, 1.0)
     else:
-        battery_action = 0.0
-
-    return safe_grid_action(
-        renewable_ratio=renewable_ratio,
-        fossil_ratio=fossil_ratio,
-        battery_action=battery_action,
+        renewable_ratio = 1.0
+        
+    # Fill remaining with fossil if necessary, but keep a small buffer
+    fossil_ratio = max(0.0, 1.0 - renewable_ratio)
+    
+    # In hard mode, conserve carbon budget if it's getting low
+    if task_name == "hard" and state.carbon_budget_remaining < 200:
+        fossil_ratio = min(fossil_ratio, 0.4)  # Take the blackout risk to save carbon
+        
+    # Total can't exceed 1.0
+    total = renewable_ratio + fossil_ratio
+    if total > 1.0:
+        if renewable_ratio > fossil_ratio:
+            fossil_ratio = 1.0 - renewable_ratio
+        else:
+            renewable_ratio = 1.0 - fossil_ratio
+            
+    # Simple battery logic
+    battery_action = 0.0
+    if state.demand > 100 and state.battery_level > 0.2:
+        battery_action = -0.8  # Discharge during high demand
+    elif state.demand < 60 and state.battery_level < 0.8:
+        battery_action = 0.8   # Charge during low demand
+        
+    return GridAction(
+        renewable_ratio=round(renewable_ratio, 3),
+        fossil_ratio=round(fossil_ratio, 3),
+        battery_action=round(battery_action, 3)
     )
 
 
 def llm_agent(state: GridState, task_name: str) -> GridAction:
     """An agent that uses an LLM to make decisions via Chain-of-Thought."""
-    litellm = _get_litellm()
-    if litellm is None:
-        return heuristic_agent(state, task_name)
     
     prompt = f"""
 You are an expert energy grid operator managing a power grid.
@@ -241,11 +182,7 @@ Then, output ONLY a valid JSON object matching this schema, with no markdown fen
             content = content[3:-3]
             
         data = json.loads(content)
-        return safe_grid_action(
-            renewable_ratio=data.get("renewable_ratio", 0.5),
-            fossil_ratio=data.get("fossil_ratio", 0.5),
-            battery_action=data.get("battery_action", 0.0),
-        )
+        return GridAction(**data)
         
     except Exception as e:
         print(f"LLM Error: {e}. Falling back to heuristic.")
@@ -265,7 +202,7 @@ def main():
     parser.add_argument("--agent", type=str, choices=["heuristic", "llm"], default="heuristic")
     args = parser.parse_args()
     
-    if args.agent == "llm" and _get_litellm() is None:
+    if args.agent == "llm" and not HAS_LITELLM:
         console.print("[bold red]Error:[/bold red] litellm package not installed. Run: pip install litellm")
         return
         

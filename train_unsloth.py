@@ -11,8 +11,6 @@ import os
 import random
 from typing import List, Dict
 
-import numpy as np
-
 try:
     import torch
     from datasets import Dataset
@@ -21,12 +19,6 @@ try:
     HAS_UNSLOTH = True
 except ImportError:
     HAS_UNSLOTH = False
-
-try:
-    import wandb
-    HAS_WANDB = True
-except ImportError:
-    HAS_WANDB = False
 
 from env.environment import EcoGridEnv
 from models.schemas import GridAction
@@ -95,28 +87,15 @@ Output ONLY a valid JSON object:
     ]
 
 
-def set_global_seed(seed: int) -> None:
-    """Set all available RNG seeds for reproducible training."""
-    random.seed(seed)
-    np.random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    if HAS_UNSLOTH:
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
-        torch.use_deterministic_algorithms(True, warn_only=True)
-
-
-def generate_training_data(num_samples: int, task: str, seed: int) -> Dataset:
+def generate_training_data(num_samples: int, task: str) -> Dataset:
     """Generate a dataset of random grid states for training."""
     print(f"Generating {num_samples} training states for task '{task}'...")
     env = EcoGridEnv()
-    rng = random.Random(seed)
     
     prompts = []
     # We just run the environment randomly to generate a variety of states
     # Note: We don't need target actions because GRPO learns through trial and error!
-    state = env.reset(task=task, seed=seed)
+    state = env.reset(task=task, seed=42)
     
     for _ in range(num_samples):
         state_dict = state.model_dump()
@@ -124,9 +103,9 @@ def generate_training_data(num_samples: int, task: str, seed: int) -> Dataset:
         
         # Take a random valid action to advance the environment
         action = GridAction(
-            renewable_ratio=rng.uniform(0, 0.8),
-            fossil_ratio=rng.uniform(0, 0.2),
-            battery_action=rng.uniform(-1, 1),
+            renewable_ratio=random.uniform(0, 0.8),
+            fossil_ratio=random.uniform(0, 0.2),
+            battery_action=random.uniform(-1, 1)
         )
         
         try:
@@ -134,7 +113,7 @@ def generate_training_data(num_samples: int, task: str, seed: int) -> Dataset:
             state = result.observation
         except Exception:
             # If done or errored, reset
-            state = env.reset(task=task, seed=rng.randint(0, 10000))
+            state = env.reset(task=task, seed=random.randint(0, 10000))
             
     return Dataset.from_dict({"prompt": prompts})
 
@@ -154,14 +133,6 @@ def main():
         return
         
     print(f"Initializing Unsloth GRPO training on {args.model}")
-    set_global_seed(args.seed)
-    
-    if HAS_WANDB:
-        wandb.init(
-            project="ecogrid-openenv", 
-            name=f"grpo-{args.task}-{args.model.split('/')[-1]}",
-            config=vars(args)
-        )
     
     # 1. Load Model
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -236,7 +207,7 @@ def main():
         return rewards
 
     # 3. Prepare Dataset
-    dataset = generate_training_data(args.samples, args.task, args.seed)
+    dataset = generate_training_data(args.samples, args.task)
     
     # 4. Configure Trainer
     training_args = GRPOConfig(
@@ -250,7 +221,7 @@ def main():
         num_generations=4, # Number of completions to generate per prompt for relative scoring
         save_steps=100,
         logging_steps=10,
-        report_to="wandb" if HAS_WANDB else "none", # W&B tracking
+        report_to="none", # We will save our own logs
     )
     
     trainer = GRPOTrainer(
@@ -264,9 +235,6 @@ def main():
     # 5. Train
     print("Starting GRPO training...")
     trainer.train()
-    
-    if HAS_WANDB:
-        wandb.finish()
     
     # 6. Save
     print("Training complete. Saving LoRA adapter...")
@@ -287,25 +255,8 @@ def main():
     os.makedirs("./logs", exist_ok=True)
     with open("./logs/reward_curve.json", "w") as f:
         json.dump(reward_curve, f, indent=2)
-
-    with open("./logs/training_metrics.json", "w") as f:
-        json.dump(
-            {
-                "task": args.task,
-                "seed": args.seed,
-                "epochs": args.epochs,
-                "samples": args.samples,
-                "model": args.model,
-                "reward_curve": reward_curve,
-                "log_history": log_history,
-            },
-            f,
-            indent=2,
-            default=str,
-        )
         
     print("Saved reward curve to ./logs/reward_curve.json")
-    print("Saved training metrics to ./logs/training_metrics.json")
 
 if __name__ == "__main__":
     main()

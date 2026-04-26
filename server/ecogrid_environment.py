@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
-from env.action_utils import coerce_grid_action
 from env.environment import EcoGridEnv
 from models.schemas import GridAction, GridState
 
@@ -38,40 +37,14 @@ class ServerEcoGridEnv(Environment):
             info={}
         )
 
-    def step(self, action: GridAction | dict) -> ServerObservation:
+    def step(self, action: GridAction) -> ServerObservation:
         self._oe_state.step_count += 1
-        safe_default = GridAction(
-            renewable_ratio=0.5,
-            fossil_ratio=0.5,
-            battery_action=0.0,
-        )
-        parsed_action, action_warning = coerce_grid_action(
-            action_like=action,
-            default_action=safe_default,
-        )
-        try:
-            result = self._env.step(parsed_action)
-        except Exception as exc:
-            # Never crash the API on malformed/edge payloads.
-            fallback_state = self._env.state() if not self._env.is_done else self._env.reset()
-            return ServerObservation(
-                observation=fallback_state,
-                reward=0.001,
-                done=self._env.is_done,
-                info={
-                    "error": f"step_failed:{type(exc).__name__}",
-                    "detail": str(exc),
-                    "action_warning": action_warning or "step_exception_fallback",
-                },
-            )
-        info = dict(result.info)
-        if action_warning:
-            info["action_warning"] = action_warning
+        result = self._env.step(action)
         return ServerObservation(
             observation=result.observation,
             reward=result.reward,
             done=result.done,
-            info=info,
+            info=result.info
         )
 
     @property

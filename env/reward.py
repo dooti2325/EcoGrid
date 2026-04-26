@@ -20,9 +20,6 @@ def compute_reward(
     action: GridAction,
     next_state: GridState,
     task_config: Dict[str, Any],
-    actual_supply: Tuple[float, float, float, float, float] | None = None,
-    actual_blackout_risk: float | None = None,
-    actual_emissions: float | None = None,
 ) -> Tuple[float, Dict[str, float]]:
     """Compute dense reward for a single timestep.
 
@@ -38,31 +35,16 @@ def compute_reward(
     # ── 1. Base Components ──
 
     # Recompute supply to get exact fossil/renewable usage for this step
-    if actual_supply is None:
-        (
-            renewable_supply,
-            fossil_supply,
-            battery_supply,
-            total_supply,
-            effective_fossil_ratio,
-        ) = compute_supply(
-            action.renewable_ratio,
-            action.fossil_ratio,
-            action.battery_action,
-            state.solar_capacity,
-            state.wind_capacity,
-            state.battery_level,
-            task_config["battery_capacity"],
-            state.demand,
-        )
-    else:
-        (
-            renewable_supply,
-            fossil_supply,
-            battery_supply,
-            total_supply,
-            effective_fossil_ratio,
-        ) = actual_supply
+    renewable_supply, fossil_supply, battery_supply, total_supply = compute_supply(
+        action.renewable_ratio,
+        action.fossil_ratio,
+        action.battery_action,
+        state.solar_capacity,
+        state.wind_capacity,
+        state.battery_level,
+        task_config["battery_capacity"],
+        state.demand,
+    )
 
     # Cost Score (Weight: 0.30)
     # Fossil fuels are expensive. Grid purchases (for unmet demand) are very expensive.
@@ -80,11 +62,7 @@ def compute_reward(
 
     # Carbon Score (Weight: 0.30)
     # Penalise carbon emissions relative to total demand.
-    emissions = (
-        actual_emissions
-        if actual_emissions is not None
-        else carbon_emission(effective_fossil_ratio, state.demand)
-    )
+    emissions = carbon_emission(action.fossil_ratio, state.demand)
     if state.demand > 0:
         # Normalise by worst case (100% fossil generation)
         worst_case_emissions = carbon_emission(1.0, state.demand)
@@ -95,11 +73,7 @@ def compute_reward(
 
     # Stability Score (Weight: 0.25)
     # Directly inversely proportional to blackout risk
-    blackout_risk = (
-        actual_blackout_risk
-        if actual_blackout_risk is not None
-        else compute_blackout_risk(state.demand, total_supply)
-    )
+    blackout_risk = compute_blackout_risk(state.demand, total_supply)
     stability_score = 1.0 - blackout_risk
 
     # Renewable Bonus (Weight: 0.15)

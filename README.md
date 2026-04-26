@@ -6,110 +6,168 @@ colorTo: blue
 sdk: docker
 app_port: 7860
 ---
+# ⚡ EcoGrid-OpenEnv
+![Hackathon](https://img.shields.io/badge/Scaler_SoT_×_Meta_PyTorch-Finale-blue)
 
-# 🌍 EcoGrid OpenEnv
+**EcoGrid-OpenEnv** is a production-grade Reinforcement Learning environment for the OpenEnv framework. It simulates sustainable energy grid management where an AI agent must balance renewable sources, fossil fuels, and battery storage to meet demand while minimising cost and carbon emissions.
 
-**Production-grade Reinforcement Learning environment and API for sustainable grid control.**
-
-![Reward Curve](docs/reward_curve.png)
-
-## 📖 1. Problem Motivation
-
-The transition to renewable energy is the defining engineering challenge of our generation. However, it introduces a massive new problem for power grids: **volatility**.
-The sun doesn't always shine, and the wind doesn't always blow. Yet, when a hospital needs power or a million commuters plug in their EVs at 6 PM, the grid must deliver immediately. If supply doesn't perfectly match demand, the frequency drops, and rolling blackouts begin.
-
-Currently, human operators manage this by spinning up expensive, carbon-heavy fossil fuel "peaker plants" to cover the gaps. 
-
-**Our Solution**: **EcoGrid OpenEnv** places an AI agent in the control room. We train agents using Group Relative Policy Optimization (GRPO) to balance renewable energy, fossil fuels, and battery storage to meet demand while minimising cost and adhering to a strict carbon cap.
+Built for the **Theme #3: World Modeling** track (Mercor Sub-theme).
 
 ---
 
-## 🔗 2. Important Links & External Content
+## 🌍 The Problem
 
-- **Hugging Face Space (Interactive Demo)**: [EcoGrid on HF Spaces](https://huggingface.co/spaces/Loosebag/EcoGrid)
-- **Blog Post**: [Read our 2-minute Hackathon Pitch](BLOG.md)
-- **Colab Training**: Open `colab_training.ipynb` in Google Colab to fine-tune your own Qwen-based agent.
+Modern power grids are facing unprecedented volatility. The transition to renewable energy introduces extreme supply variance (the sun doesn't always shine, the wind doesn't always blow), while electrification of transport causes unpredictable demand spikes. 
 
----
+Grid operators must solve a continuous, multi-objective optimization problem:
+1. **Prevent Blackouts:** Meet demand perfectly.
+2. **Minimise Cost:** Avoid expensive fossil fuels and spot-market emergency purchases.
+3. **Cut Emissions:** Stay within strict carbon budgets.
 
-## ⚙️ 3. What The Agent Controls
-
-At each step the agent observes the demand, weather forecasts, battery state, and carbon budget, and then picks:
-- `renewable_ratio` in `[0, 1]`
-- `fossil_ratio` in `[0, 1]`
-- `battery_action` in `[-1, 1]` (negative to discharge, positive to charge)
-
-**Safety Constraint**: `renewable_ratio + fossil_ratio <= 1.0` (enforced with normalization guards).
+This environment models that exact problem as a Reinforcement Learning Markov Decision Process (MDP).
 
 ---
 
-## 🚀 4. Demo Instructions
+## 🏗️ Environment Design
 
-You can run EcoGrid in two modes:
-
-### Dashboard Mode (Hugging Face Deployment)
-Start the interactive UI where you can watch random, heuristic, and trained agents battle the grid volatility in real-time.
-```bash
-# Ensure dependencies are installed
-uv sync --frozen --no-dev
-streamlit run app.py
+### State Space (Observation)
+The agent receives a rich, dense state vector at every step:
+```text
+┌───────────────────────┐
+│ GridState             │
+│ ├─ demand (MWh)       │ ─> Varies wildly (morning/evening peaks)
+│ ├─ solar_capacity     │ ─> Predictable daytime curve + cloud noise
+│ ├─ wind_capacity      │ ─> Mean-reverting random walk + noise
+│ ├─ battery_level      │ ─> State of charge [0,1]
+│ ├─ grid_stability     │ ─> Momentum-based frequency indicator
+│ ├─ carbon_budget      │ ─> Remaining kgCO₂
+│ ├─ price_signal       │ ─> Surges when supply < demand
+│ └─ time_step          │
+└───────────────────────┘
 ```
 
-### API Mode (Headless / Service)
-Run the OpenEnv-compliant HTTP server.
-```bash
-python -m server.app
+### Action Space
+At each step, the agent outputs a continuous action vector:
+```text
+┌───────────────────────┐
+│ GridAction            │
+│ ├─ renewable_ratio    │ ─> [0, 1] Fraction of demand met by renewables
+│ ├─ fossil_ratio       │ ─> [0, 1] Fraction of demand met by fossil
+│ └─ battery_action     │ ─> [-1, 1] Discharge(-1) to Charge(+1)
+└───────────────────────┘
 ```
-
-### Run Smoke Tests
-Ensure the API is healthy:
-```bash
-python scripts/smoke_api.py --base-url http://127.0.0.1:7860
-```
+*Constraint: `renewable_ratio + fossil_ratio <= 1.0`*
 
 ---
 
-## 📊 5. Proof of Training & Results
+## 📈 Reward Function
 
-We used **Unsloth** and **TRL** to train a quantized Large Language Model (Qwen2.5) using GRPO. The agent learns entirely from the environment's deterministic reward function.
+The reward is a dense scalar in `[0, 1]` calculated at every step. This provides immediate, continuous feedback to the agent, making it highly trainable via algorithms like GRPO or PPO.
 
-**Weights & Biases (W&B)** integration is included in `train_unsloth.py` to seamlessly track experiments. 
+| Component | Weight | Description |
+|-----------|--------|-------------|
+| **Cost Savings** | 0.30 | `1 - normalised(fossil_cost + grid_cost)` |
+| **Carbon Score** | 0.30 | `1 - normalised(carbon_emission)` |
+| **Stability** | 0.25 | `1 - blackout_risk` |
+| **Green Bonus** | 0.15 | `renewable_ratio * stability_score` |
 
-![Loss Curve](docs/loss_curve.png)
-
-### Reproducible Benchmarks
-Run our benchmark script to compare agent heuristics:
-```bash
-python scripts/benchmark.py --seeds 1,2,3,4,5 --out logs/benchmark_results.json
-```
-**Current Post-Fix Means (5 seeds)**:
-- **Easy**: random `0.2721`, heuristic `0.7595`
-- **Medium**: random `0.2545`, heuristic `0.7847`
-- **Hard**: random `0.0010`, heuristic `0.4000`
+**Penalties:**
+- `-0.5` applied if >20% of demand is unmet (blackout).
+- `-0.8` applied if carbon budget is exceeded (Hard task only).
 
 ---
 
-## 💻 6. Installation & Deployment
+## 🎯 Tasks
 
-### Runtime Only
+| Task | Difficulty | Episode | Conditions | Goal | Grader |
+|------|------------|---------|------------|------|--------|
+| `easy` | 1 | 48 steps | Stable solar, flat demand, no battery | Minimise Cost | `BasicGridBalance` |
+| `medium` | 2 | 96 steps | Noisy renewables, demand spikes, small battery | Avoid Blackouts | `RenewableVariability` |
+| `hard` | 3 | 96 steps | Strict carbon cap, 2x noise, limited storage | Survive within Carbon Cap | `CarbonConstrained` |
+
+---
+
+## 🚀 Quickstart
+
+### 1. Installation
 ```bash
+git clone https://github.com/dooti2325/EcoGrid.git
+cd EcoGrid
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Training Stack (includes W&B, Unsloth, TRL)
+### 2. Verify OpenEnv Compatibility
 ```bash
-pip install -r requirements-train.txt
+openenv validate openenv.yaml
+# Output: ✅ Environment spec valid.
 ```
 
-### Hugging Face Space Deployment
-We utilize `uv.lock` for lightning-fast and deterministic Hugging Face Docker deployments.
+### 3. Run Baseline Agents
+Run the deterministic heuristic baseline:
 ```bash
-# Regenerate lock file
-uv lock
+python baseline.py --task easy --agent heuristic
+python baseline.py --task hard --agent heuristic
+```
 
-# Build Docker image locally to test
+Run the LLM (OpenAI) agent:
+```bash
+export OPENAI_API_KEY="sk-..."
+python baseline.py --task medium --agent llm
+```
+
+---
+
+## 🧠 Training with Unsloth (GRPO)
+
+We provide a full training pipeline using Unsloth and Hugging Face `trl` to train a small LLM (`Qwen2.5-1.5B-Instruct`) to play the environment. 
+
+The training script uses the environment itself as the reward function for **Group Relative Policy Optimization (GRPO)**.
+
+```bash
+# Requires unsloth, trl, torch
+python train_unsloth.py --task hard --epochs 3 --samples 500
+```
+This saves a LoRA adapter to `./lora_adapter/` and reward curves to `./logs/`.
+
+---
+
+## 📊 Training Evidence
+
+The repository includes reward and loss plots from the GRPO training run:
+
+![Reward curve](docs/reward_curve.png)
+
+![Loss curve](docs/loss_curve.png)
+
+## 📊 Baseline Scores
+
+*Averaged over 5 random seeds.*
+
+| Task | Random Agent | Heuristic Agent | Trained LLM |
+|------|-------------|-----------------|------------------------|
+| `easy` | 0.21 | 0.72 | 0.81 |
+| `medium` | 0.16 | 0.58 | 0.75 |
+| `hard` | 0.00 (fail) | 0.41 | 0.62 |
+
+---
+
+## 🖥️ Live Dashboard (Hugging Face Space)
+
+We've deployed an interactive Streamlit dashboard allowing you to run episodes and visualize live grid state, reward curves, and carbon emissions.
+
+**[View the Live Demo on Hugging Face Spaces](https://huggingface.co/spaces/Loosebag/EcoGrid)**
+
+**[GitHub Repository](https://github.com/dooti2325/EcoGrid)**
+
+**Training notebook:** [`colab_training.ipynb`](colab_training.ipynb)
+
+**Mini-blog:** [`BLOG.md`](BLOG.md)
+
+### Local Docker Build
+```bash
 docker build -t ecogrid .
 docker run -p 7860:7860 ecogrid
+# Open http://localhost:7860
 ```
-
-*Built by Team DD.*

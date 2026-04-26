@@ -19,7 +19,6 @@ from typing import List, Optional
 from openai import OpenAI
 
 from env.environment import EcoGridEnv
-from env.action_utils import safe_grid_action
 from env.tasks import BasicGridBalanceGrader, RenewableVariabilityGrader, CarbonConstrainedGrader
 from models.schemas import GridAction, GridState
 
@@ -101,10 +100,10 @@ def _fallback_action(task_name: str, state: GridState) -> GridAction:
     elif state.demand < 60 and state.battery_level < 0.8:
         battery_action = 0.8
         
-    return safe_grid_action(
-        renewable_ratio=renewable_ratio,
-        fossil_ratio=fossil_ratio,
-        battery_action=battery_action,
+    return GridAction(
+        renewable_ratio=round(renewable_ratio, 3),
+        fossil_ratio=round(fossil_ratio, 3),
+        battery_action=round(battery_action, 3)
     )
 
 
@@ -157,11 +156,7 @@ Then, output ONLY a valid JSON object matching this schema, with no markdown fen
         content = content[3:-3]
         
     data = json.loads(content)
-    return safe_grid_action(
-        renewable_ratio=data.get("renewable_ratio", preferred.renewable_ratio),
-        fossil_ratio=data.get("fossil_ratio", preferred.fossil_ratio),
-        battery_action=data.get("battery_action", preferred.battery_action),
-    )
+    return GridAction(**data)
 
 
 # ---------------------------------------------------------------------------
