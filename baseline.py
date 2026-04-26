@@ -21,6 +21,7 @@ from models.schemas import GridAction, GridState
 
 _trained_model = None
 _trained_tokenizer = None
+_trained_load_attempted = False
 TASK_EPISODE_LENGTH = {"easy": 48, "medium": 96, "hard": 96}
 FOSSIL_EMISSION_FACTOR = 0.5
 LORA_DIR = Path(os.environ.get("LORA_ADAPTER_DIR", str(Path(__file__).resolve().parent / "lora_adapter"))).resolve()
@@ -42,15 +43,18 @@ def _get_litellm():
 
 def load_trained_model():
     """Lazily load the LoRA model if available."""
-    global _trained_model, _trained_tokenizer
+    global _trained_model, _trained_tokenizer, _trained_load_attempted
     if _trained_model is not None:
         return _trained_model, _trained_tokenizer
+    if _trained_load_attempted:
+        return None, None
         
     adapter_config_path = LORA_DIR / "adapter_config.json"
     if not adapter_config_path.exists():
         return None, None
         
     print(f"Loading LoRA adapter from {LORA_DIR} ...")
+    _trained_load_attempted = True
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
         from peft import PeftModel

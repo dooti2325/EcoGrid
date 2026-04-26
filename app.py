@@ -1,5 +1,5 @@
-"""
-EcoGrid-OpenEnv — Streamlit Dashboard
+﻿"""
+EcoGrid-OpenEnv â€” Streamlit Dashboard
 
 A 3-panel interactive dashboard for visualizing the RL environment, 
 demonstrating the difference between random, heuristic, and trained agents.
@@ -11,19 +11,31 @@ import pandas as pd
 import plotly.graph_objects as go
 import json
 import os
+import importlib.util
 
 from env.environment import EcoGridEnv
 from models.schemas import GridAction
-from baseline import heuristic_agent, local_llm_agent, load_trained_model
+from baseline import heuristic_agent, local_llm_agent, load_trained_model, LORA_DIR
 
 # Use wide mode
 st.set_page_config(page_title="EcoGrid RL Environment", layout="wide")
 
-@st.cache_resource
+@st.cache_data
 def init_llm_model():
-    """Load the LoRA model once and return availability."""
-    model, _ = load_trained_model()
-    return model is not None
+    """Fast availability check (no heavyweight model load)."""
+    required_files = (
+        "adapter_config.json",
+        "adapter_model.safetensors",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    )
+    files_ok = all((LORA_DIR / name).exists() for name in required_files)
+    deps_ok = (
+        importlib.util.find_spec("transformers") is not None
+        and importlib.util.find_spec("peft") is not None
+        and importlib.util.find_spec("torch") is not None
+    )
+    return files_ok and deps_ok
 
 TRAINED_AVAILABLE = init_llm_model()
 
@@ -54,6 +66,9 @@ def init_session():
         st.session_state.state = st.session_state.env.reset(task="medium", seed=42)
         st.session_state.history = []
         st.session_state.cumulative_reward = 0.0
+        st.session_state.trained_runtime_checked = False
+        st.session_state.trained_runtime_ready = False
+        st.session_state.trained_fallback_used = False
 
 def step_env(agent_type):
     env = st.session_state.env
@@ -67,7 +82,16 @@ def step_env(agent_type):
     elif agent_type == "Heuristic":
         action = heuristic_agent(state, st.session_state.current_task)
     else: # Trained
-        action = trained_agent(state)
+        if not st.session_state.trained_runtime_checked:
+            model, _ = load_trained_model()
+            st.session_state.trained_runtime_checked = True
+            st.session_state.trained_runtime_ready = model is not None
+
+        if st.session_state.trained_runtime_ready:
+            action = trained_agent(state)
+        else:
+            st.session_state.trained_fallback_used = True
+            action = heuristic_agent(state, st.session_state.current_task)
         
     result = env.step(action)
     st.session_state.state = result.observation
@@ -87,9 +111,9 @@ def step_env(agent_type):
 
 init_session()
 
-# ── Sidebar ──
+# â”€â”€ Sidebar â”€â”€
 with st.sidebar:
-    st.title("⚡ EcoGrid Config")
+    st.title("âš¡ EcoGrid Config")
     
     task = st.selectbox("Select Task Difficulty", ["easy", "medium", "hard"], index=1)
     if task != st.session_state.current_task:
@@ -98,6 +122,9 @@ with st.sidebar:
         st.session_state.state = st.session_state.env.reset(task=task, seed=42)
         st.session_state.history = []
         st.session_state.cumulative_reward = 0.0
+        st.session_state.trained_runtime_checked = False
+        st.session_state.trained_runtime_ready = False
+        st.session_state.trained_fallback_used = False
         
     agent_options = ["Random", "Heuristic"]
     if TRAINED_AVAILABLE:
@@ -106,37 +133,48 @@ with st.sidebar:
     if not TRAINED_AVAILABLE:
         st.warning(
             "Trained (LoRA) is unavailable in this deployment, so only Random/Heuristic are active.",
-            icon="⚠️",
+            icon="âš ï¸",
         )
         st.caption(
-            "Why: missing LoRA runtime artifacts or missing training deps (transformers/peft/torch) in the Space image."
+            "Why: missing files in lora_adapter/ or missing transformers/peft/torch in the Space image."
+        )
+    elif st.session_state.trained_fallback_used and not st.session_state.trained_runtime_ready:
+        st.warning(
+            "Tried to load LoRA at runtime but it failed, so Trained is currently falling back to Heuristic.",
+            icon="âš ï¸",
         )
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("▶ Step"):
+        if st.button("â–¶ Step"):
             step_env(agent)
     with col2:
-        if st.button("⏭ Run Episode"):
+        if st.button("â­ Run Episode"):
             while not st.session_state.env.is_done:
                 step_env(agent)
                 
-    if st.button("🔄 Reset"):
+    if st.button("ðŸ”„ Reset"):
         st.session_state.env = EcoGridEnv()
         st.session_state.state = st.session_state.env.reset(task=task, seed=42)
         st.session_state.history = []
         st.session_state.cumulative_reward = 0.0
+        st.session_state.trained_runtime_checked = False
+        st.session_state.trained_runtime_ready = False
+        st.session_state.trained_fallback_used = False
 
-# ── Main UI ──
+# â”€â”€ Main UI â”€â”€
 st.markdown("""
 <div class="main-header">
-    <h1>🌍 EcoGrid <span class="highlight">OpenEnv</span></h1>
+    <h1>ðŸŒ EcoGrid <span class="highlight">OpenEnv</span></h1>
     <p>Production-Grade RL Environment for Sustainable Energy Grid Management</p>
 </div>
 """, unsafe_allow_html=True)
 
 if TRAINED_AVAILABLE:
-    st.success("Trained LoRA model loaded successfully.", icon="✅")
+    if st.session_state.trained_runtime_ready:
+        st.success("Trained LoRA model loaded successfully.", icon="✅")
+    else:
+        st.info("Trained LoRA is available and will load when you run the first Trained step.", icon="ℹ️")
 else:
     st.info("Running in baseline mode (no active trained LoRA in this Space build).", icon="ℹ️")
 
@@ -145,7 +183,7 @@ col_live, col_reward, col_emissions = st.columns(3)
 # Panel 1: Live Grid State
 with col_live:
     with st.container(border=True):
-        st.markdown('<div class="panel-title">📡 Live Grid State</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">ðŸ“¡ Live Grid State</div>', unsafe_allow_html=True)
         state = st.session_state.state
         
         st.metric("Timestep", f"{state.time_step} / {st.session_state.env.get_task_config(st.session_state.current_task)['episode_length']}")
@@ -183,7 +221,7 @@ with col_live:
 # Panel 2: Reward Over Time
 with col_reward:
     with st.container(border=True):
-        st.markdown('<div class="panel-title">📈 Agent Performance</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">ðŸ“ˆ Agent Performance</div>', unsafe_allow_html=True)
         
         if st.session_state.history:
             df = pd.DataFrame(st.session_state.history)
@@ -202,13 +240,13 @@ with col_reward:
             fig4.update_layout(title=dict(text="Reward Breakdown", font=dict(color="#a0aec0", size=13)), height=200, margin=dict(l=10, r=10, t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#e2e8f0")), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
             st.plotly_chart(fig4, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.info("Press '▶ Step' or '⏭ Run Episode' in the sidebar to see performance charts.")
+            st.info("Press 'â–¶ Step' or 'â­ Run Episode' in the sidebar to see performance charts.")
             for _ in range(12): st.empty() # padding to match height
 
 # Panel 3: Emissions & Training
 with col_emissions:
     with st.container(border=True):
-        st.markdown('<div class="panel-title">🌍 Emissions & Training</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">ðŸŒ Emissions & Training</div>', unsafe_allow_html=True)
         
         # Carbon Budget Gauge
         max_budget = st.session_state.env.get_task_config(st.session_state.current_task)['carbon_budget']
@@ -233,7 +271,7 @@ with col_emissions:
         st.plotly_chart(fig5, use_container_width=True, config={'displayModeBar': False})
         
         # RL Training Curve
-        st.markdown("<div style='font-size: 13px; color: #a0aec0; margin-top: 10px; margin-bottom: -10px;'>🧠 GRPO Training Progress (Unsloth)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 13px; color: #a0aec0; margin-top: 10px; margin-bottom: -10px;'>ðŸ§  GRPO Training Progress (Unsloth)</div>", unsafe_allow_html=True)
         curve_data = load_reward_curve()
         if curve_data:
             df_curve = pd.DataFrame(curve_data)
@@ -246,7 +284,7 @@ with col_emissions:
 
 st.markdown("""
 <div class="footer">
-    EcoGrid OpenEnv — Hackathon Finale Submission
+    EcoGrid OpenEnv â€” Hackathon Finale Submission
 </div>
 """, unsafe_allow_html=True)
 
@@ -363,3 +401,4 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
