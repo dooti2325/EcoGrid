@@ -41,6 +41,15 @@ def _get_litellm():
         HAS_LITELLM = False
         return None
 
+def is_lora_valid() -> bool:
+    """Check if LoRA files exist and are not just Git LFS pointers (> 1KB)."""
+    required_files = ["adapter_model.safetensors", "tokenizer.json"]
+    for name in required_files:
+        path = LORA_DIR / name
+        if not path.exists() or path.stat().st_size < 1024: # LFS pointers are ~133 bytes
+            return False
+    return True
+
 def load_trained_model():
     """Lazily load the LoRA model if available."""
     global _trained_model, _trained_tokenizer, _trained_load_attempted
@@ -50,7 +59,7 @@ def load_trained_model():
         return None, None
         
     adapter_config_path = LORA_DIR / "adapter_config.json"
-    if not adapter_config_path.exists():
+    if not adapter_config_path.exists() or not is_lora_valid():
         return None, None
         
     print(f"Loading LoRA adapter from {LORA_DIR} ...")
