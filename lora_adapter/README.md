@@ -1,9 +1,9 @@
 ---
-base_model: unsloth/qwen2.5-1.5b-instruct-unsloth-bnb-4bit
+base_model: unsloth/qwen2.5-7b-instruct-unsloth-bnb-4bit
 library_name: peft
 model_name: lora_adapter
 tags:
-- base_model:adapter:unsloth/qwen2.5-1.5b-instruct-unsloth-bnb-4bit
+- base_model:adapter:unsloth/qwen2.5-7b-instruct-unsloth-bnb-4bit
 - grpo
 - lora
 - transformers
@@ -15,7 +15,7 @@ pipeline_tag: text-generation
 
 # Model Card for lora_adapter
 
-This model is a fine-tuned version of [unsloth/qwen2.5-1.5b-instruct-unsloth-bnb-4bit](https://huggingface.co/unsloth/qwen2.5-1.5b-instruct-unsloth-bnb-4bit).
+This model is a fine-tuned version of [unsloth/qwen2.5-7b-instruct-unsloth-bnb-4bit](https://huggingface.co/unsloth/qwen2.5-7b-instruct-unsloth-bnb-4bit).
 It has been trained using [TRL](https://github.com/huggingface/trl).
 
 ## Quick start
@@ -31,7 +31,7 @@ print(output["generated_text"])
 
 ## Training procedure
 
- 
+[<img src="https://raw.githubusercontent.com/wandb/assets/main/wandb-github-badge-28.svg" alt="Visualize in Weights & Biases" width="150" height="24"/>](https://wandb.ai/divyankissus-gh-raisoni-university/ecogrid-openenv/runs/exyntqjj) 
 
 
 This model was trained with GRPO, a method introduced in [DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models](https://huggingface.co/papers/2402.03300).
