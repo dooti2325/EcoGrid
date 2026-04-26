@@ -1,173 +1,126 @@
----
-title: EcoGrid OpenEnv
-emoji: 🌍
-colorFrom: green
-colorTo: blue
-sdk: docker
-app_port: 7860
----
-# ⚡ EcoGrid-OpenEnv
-![Hackathon](https://img.shields.io/badge/Scaler_SoT_×_Meta_PyTorch-Finale-blue)
+# EcoGrid OpenEnv
 
-**EcoGrid-OpenEnv** is a production-grade Reinforcement Learning environment for the OpenEnv framework. It simulates sustainable energy grid management where an AI agent must balance renewable sources, fossil fuels, and battery storage to meet demand while minimising cost and carbon emissions.
+Production-ready RL environment and API for sustainable grid control.
 
-Built for the **Theme #3: World Modeling** track (Mercor Sub-theme).
+This repo now ships with:
+- Stable OpenEnv API server (`/health`, `/reset`, `/step`, `/schema`)
+- Deterministic environment behavior for fixed seeds
+- Action safety guards that prevent invalid action sums after rounding
+- Hardened deployment path for Hugging Face Spaces (Docker + `uv.lock`)
+- Reproducible benchmark script with before/after comparison output
 
----
+## 1) What The Agent Controls
 
-## 🌍 The Problem
+At each step the agent picks:
+- `renewable_ratio` in `[0, 1]`
+- `fossil_ratio` in `[0, 1]`
+- `battery_action` in `[-1, 1]`
 
-Modern power grids are facing unprecedented volatility. The transition to renewable energy introduces extreme supply variance (the sun doesn't always shine, the wind doesn't always blow), while electrification of transport causes unpredictable demand spikes. 
+Safety constraint:
+- `renewable_ratio + fossil_ratio <= 1.0` (enforced with normalization guards)
 
-Grid operators must solve a continuous, multi-objective optimization problem:
-1. **Prevent Blackouts:** Meet demand perfectly.
-2. **Minimise Cost:** Avoid expensive fossil fuels and spot-market emergency purchases.
-3. **Cut Emissions:** Stay within strict carbon budgets.
+## 2) Runtime Modes
 
-This environment models that exact problem as a Reinforcement Learning Markov Decision Process (MDP).
+- API mode (default deployment): `python -m server.app`
+- Dashboard mode (optional local demo): `streamlit run app.py`
 
----
+HF Space Docker deployment uses API mode.
 
-## 🏗️ Environment Design
+## 3) Install
 
-### State Space (Observation)
-The agent receives a rich, dense state vector at every step:
-```text
-┌───────────────────────┐
-│ GridState             │
-│ ├─ demand (MWh)       │ ─> Varies wildly (morning/evening peaks)
-│ ├─ solar_capacity     │ ─> Predictable daytime curve + cloud noise
-│ ├─ wind_capacity      │ ─> Mean-reverting random walk + noise
-│ ├─ battery_level      │ ─> State of charge [0,1]
-│ ├─ grid_stability     │ ─> Momentum-based frequency indicator
-│ ├─ carbon_budget      │ ─> Remaining kgCO₂
-│ ├─ price_signal       │ ─> Surges when supply < demand
-│ └─ time_step          │
-└───────────────────────┘
-```
-
-### Action Space
-At each step, the agent outputs a continuous action vector:
-```text
-┌───────────────────────┐
-│ GridAction            │
-│ ├─ renewable_ratio    │ ─> [0, 1] Fraction of demand met by renewables
-│ ├─ fossil_ratio       │ ─> [0, 1] Fraction of demand met by fossil
-│ └─ battery_action     │ ─> [-1, 1] Discharge(-1) to Charge(+1)
-└───────────────────────┘
-```
-*Constraint: `renewable_ratio + fossil_ratio <= 1.0`*
-
----
-
-## 📈 Reward Function
-
-The reward is a dense scalar in `[0, 1]` calculated at every step. This provides immediate, continuous feedback to the agent, making it highly trainable via algorithms like GRPO or PPO.
-
-| Component | Weight | Description |
-|-----------|--------|-------------|
-| **Cost Savings** | 0.30 | `1 - normalised(fossil_cost + grid_cost)` |
-| **Carbon Score** | 0.30 | `1 - normalised(carbon_emission)` |
-| **Stability** | 0.25 | `1 - blackout_risk` |
-| **Green Bonus** | 0.15 | `renewable_ratio * stability_score` |
-
-**Penalties:**
-- `-0.5` applied if >20% of demand is unmet (blackout).
-- `-0.8` applied if carbon budget is exceeded (Hard task only).
-
----
-
-## 🎯 Tasks
-
-| Task | Difficulty | Episode | Conditions | Goal | Grader |
-|------|------------|---------|------------|------|--------|
-| `easy` | 1 | 48 steps | Stable solar, flat demand, no battery | Minimise Cost | `BasicGridBalance` |
-| `medium` | 2 | 96 steps | Noisy renewables, demand spikes, small battery | Avoid Blackouts | `RenewableVariability` |
-| `hard` | 3 | 96 steps | Strict carbon cap, 2x noise, limited storage | Survive within Carbon Cap | `CarbonConstrained` |
-
----
-
-## 🚀 Quickstart
-
-### 1. Installation
+### Runtime only
 ```bash
-git clone https://github.com/dooti2325/EcoGrid.git
-cd EcoGrid
-python -m venv venv
-source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Verify OpenEnv Compatibility
+### Runtime + training stack
 ```bash
-openenv validate openenv.yaml
-# Output: ✅ Environment spec valid.
+pip install -r requirements-train.txt
 ```
 
-### 3. Run Baseline Agents
-Run the deterministic heuristic baseline:
+## 4) Reproducible Benchmarks
+
+Run:
 ```bash
-python baseline.py --task easy --agent heuristic
-python baseline.py --task hard --agent heuristic
+python scripts/benchmark.py --seeds 1,2,3,4,5 --out logs/benchmark_results.json
 ```
 
-Run the LLM (OpenAI) agent:
+Current post-fix means (5 seeds):
+- easy: random `0.2721`, heuristic `0.7595`
+- medium: random `0.2545`, heuristic `0.7847`
+- hard: random `0.0010`, heuristic `0.4000`
+
+Reference pre-fix means used for delta tracking:
+- easy: random `0.269`, heuristic `0.748`
+- medium: random `0.251`, heuristic `0.376`
+- hard: random `0.001`, heuristic `0.001`
+
+## 5) API Smoke Test
+
+Start server:
 ```bash
-export OPENAI_API_KEY="sk-..."
-python baseline.py --task medium --agent llm
+python -m server.app
 ```
 
----
+Then:
+```bash
+python scripts/smoke_api.py --base-url http://127.0.0.1:7860
+```
 
-## 🧠 Training with Unsloth (GRPO)
+This checks:
+- `GET /health`
+- `POST /reset`
+- `POST /step` (direct action payload compatibility)
 
-We provide a full training pipeline using Unsloth and Hugging Face `trl` to train a small LLM (`Qwen2.5-1.5B-Instruct`) to play the environment. 
-
-The training script uses the environment itself as the reward function for **Group Relative Policy Optimization (GRPO)**.
+## 6) Test Suite
 
 ```bash
-# Requires unsloth, trl, torch
-python train_unsloth.py --task hard --epochs 3 --samples 500
+pytest -q
 ```
-This saves a LoRA adapter to `./lora_adapter/` and reward curves to `./logs/`.
 
----
+Coverage includes:
+- environment unit tests
+- reward/grader tests
+- action normalization regression tests
+- API smoke/integration tests
+- reproducibility checks (same seed => same trajectory)
 
-## 📊 Training Evidence
+## 7) Hugging Face Space Deployment
 
-The repository includes reward and loss plots from the GRPO training run:
+### Lock strategy
+- Runtime dependencies live in `pyproject.toml` default deps.
+- Heavy training deps are optional (`[project.optional-dependencies].train`).
+- `uv.lock` is committed and used with `--frozen`.
 
-![Reward curve](docs/reward_curve.png)
-
-![Loss curve](docs/loss_curve.png)
-
-## 📊 Baseline Scores
-
-*Averaged over 5 random seeds.*
-
-| Task | Random Agent | Heuristic Agent | Trained LLM |
-|------|-------------|-----------------|------------------------|
-| `easy` | 0.21 | 0.72 | 0.81 |
-| `medium` | 0.16 | 0.58 | 0.75 |
-| `hard` | 0.00 (fail) | 0.41 | 0.62 |
-
----
-
-## 🖥️ Live Dashboard (Hugging Face Space)
-
-We've deployed an interactive Streamlit dashboard allowing you to run episodes and visualize live grid state, reward curves, and carbon emissions.
-
-**[View the Live Demo on Hugging Face Spaces](https://huggingface.co/spaces/Loosebag/EcoGrid)**
-
-**[GitHub Repository](https://github.com/dooti2325/EcoGrid)**
-
-**Training notebook:** [`colab_training.ipynb`](colab_training.ipynb)
-
-**Mini-blog:** [`BLOG.md`](BLOG.md)
-
-### Local Docker Build
+Regenerate lock file:
 ```bash
-docker build -t ecogrid .
-docker run -p 7860:7860 ecogrid
-# Open http://localhost:7860
+uv lock
 ```
+
+### Docker (Space) build path
+The committed `Dockerfile` does:
+1. `uv sync --frozen --no-dev --no-install-project`
+2. copy source
+3. `uv sync --frozen --no-dev`
+4. run `/opt/venv/bin/python -m server.app`
+
+Healthcheck:
+- container-level health probe hits `http://127.0.0.1:7860/health`
+
+## 8) Minimal Deployment Checklist
+
+- `uv lock` succeeds locally
+- `uv sync --frozen --no-dev` succeeds locally
+- `pytest -q` passes
+- `python scripts/smoke_api.py` passes against local server
+- Docker build succeeds
+- Space runtime reports healthy and serves `/health`, `/schema`, `/docs`
+
+## 9) Project Structure
+
+- `env/` core environment dynamics, rewards, action safety helpers
+- `server/` OpenEnv/FastAPI serving layer
+- `baseline.py` heuristic + optional LLM baseline runner
+- `train_unsloth.py` deterministic training pipeline and metric logging
+- `scripts/benchmark.py` reproducible benchmark runner
+- `scripts/smoke_api.py` deployment smoke test runner

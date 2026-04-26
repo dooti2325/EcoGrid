@@ -3,6 +3,10 @@ lora_adapter/
 __pycache__/
 *.pyc
 venv/
+.venv/
+.pydeps/
+.uv-venv/
+.uv-python/
 .env
 .pytest_cache/
 pytest-cache-files-*/

@@ -92,12 +92,20 @@ def demand_curve(
     # Evening peak (around hour 18)
     evening = 40.0 * np.exp(-((hour - 18) ** 2) / 8.0)
 
+    # Weekly operational cycle (business-day effect)
+    day_of_week = (time_step // 24) % 7
+    weekday_multiplier = 1.0 if day_of_week < 5 else 0.92
+
+    # Correlated weather/event noise on demand.
+    # Deterministic under the seeded RNG.
+    stochastic_component = rng.normal(0, 4.0 * max(0.2, volatility))
+
     # Random spike (occurs with probability proportional to volatility)
     spike = 0.0
     if volatility > 0 and rng.random() < 0.05 * volatility:
         spike = rng.uniform(10, 40) * volatility
 
-    demand = base_demand + morning + evening + spike
+    demand = (base_demand + morning + evening + stochastic_component + spike) * weekday_multiplier
     return float(np.clip(demand, 0.0, 200.0))
 
 
@@ -106,6 +114,8 @@ def update_battery(
     action: float,
     capacity: float,
     charge_rate: float = 0.15,
+    charge_efficiency: float = 0.94,
+    discharge_efficiency: float = 0.94,
 ) -> float:
     """Update battery state of charge.
 
@@ -120,7 +130,12 @@ def update_battery(
     """
     if capacity <= 0:
         return 0.0
-    delta = action * charge_rate * capacity
+    if action >= 0:
+        delta = action * charge_rate * capacity * charge_efficiency
+    else:
+        # Discharging removes more SoC than delivered energy because of losses.
+        eff = max(discharge_efficiency, 1e-6)
+        delta = action * charge_rate * capacity / eff
     return float(np.clip(level + delta, 0.0, 1.0))
 
 
@@ -168,7 +183,10 @@ def compute_supply(
     battery_level: float,
     battery_capacity: float,
     demand: float,
-) -> tuple[float, float, float, float]:
+    previous_fossil_ratio: float | None = None,
+    fossil_ramp_limit: float | None = None,
+    discharge_efficiency: float = 0.94,
+) -> tuple[float, float, float, float, float]:
     """Compute total energy supply from all sources.
 
     Args:
@@ -188,14 +206,28 @@ def compute_supply(
     avg_renewable_cap = (solar_cap + wind_cap) / 2.0
     renewable_supply = action_renewable * demand * min(1.0, avg_renewable_cap / max(action_renewable, 0.01))
 
-    # Fossil supply (always available, just costs more)
-    fossil_supply = action_fossil * demand
+    # Fossil ramp-rate constraints emulate thermal plant limitations.
+    effective_fossil_ratio = action_fossil
+    if previous_fossil_ratio is not None and fossil_ramp_limit is not None:
+        lower = max(0.0, previous_fossil_ratio - fossil_ramp_limit)
+        upper = min(1.0, previous_fossil_ratio + fossil_ramp_limit)
+        effective_fossil_ratio = float(np.clip(action_fossil, lower, upper))
+
+    # Fossil supply (dispatchable but ramp-limited when configured)
+    fossil_supply = effective_fossil_ratio * demand
 
     # Battery can supplement supply when discharging
     battery_supply = 0.0
     if battery_action < 0 and battery_capacity > 0:
         # Discharging: supply is proportional to discharge rate and level
-        battery_supply = abs(battery_action) * battery_level * battery_capacity * demand * 0.2
+        battery_supply = (
+            abs(battery_action)
+            * battery_level
+            * battery_capacity
+            * demand
+            * 0.2
+            * discharge_efficiency
+        )
 
     total = renewable_supply + fossil_supply + battery_supply
     return (
@@ -203,6 +235,7 @@ def compute_supply(
         float(fossil_supply),
         float(battery_supply),
         float(total),
+        float(effective_fossil_ratio),
     )
 
 

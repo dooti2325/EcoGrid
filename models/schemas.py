@@ -177,4 +177,22 @@ class TaskConfig(BaseModel):
         ge=0,
         description="Multiplier for renewable noise (2x for hard task)",
     )
+    fossil_ramp_limit: float = Field(
+        default=0.35,
+        ge=0,
+        le=1,
+        description="Max allowed step-to-step change in fossil ratio",
+    )
+    battery_charge_efficiency: float = Field(
+        default=0.94,
+        ge=0.5,
+        le=1.0,
+        description="Battery charge efficiency",
+    )
+    battery_discharge_efficiency: float = Field(
+        default=0.94,
+        ge=0.5,
+        le=1.0,
+        description="Battery discharge efficiency",
+    )
     description: str = Field(default="", description="Human-readable task description")

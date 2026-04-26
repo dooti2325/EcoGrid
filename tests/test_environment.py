@@ -82,3 +82,35 @@ def test_carbon_overrun_termination():
             break
             
     assert done is True
+
+
+def test_step_accepts_dict_action_and_adds_warning_for_invalid_payload():
+    env = EcoGridEnv()
+    env.reset(task="medium", seed=42)
+
+    # Invalid dict payload should be coerced to safe fallback action
+    result = env.step({"renewable_ratio": "bad_value"})
+
+    assert result.done is False
+    assert "action_warning" in result.info
+    assert result.observation.time_step == 1
+
+
+def test_full_episode_reproducibility_same_seed_same_trajectory():
+    env1 = EcoGridEnv()
+    env2 = EcoGridEnv()
+    env1.reset(task="hard", seed=123)
+    env2.reset(task="hard", seed=123)
+
+    action = GridAction(renewable_ratio=0.6, fossil_ratio=0.3, battery_action=0.0)
+    rewards_1 = []
+    rewards_2 = []
+
+    for _ in range(10):
+        r1 = env1.step(action)
+        r2 = env2.step(action)
+        rewards_1.append(r1.reward)
+        rewards_2.append(r2.reward)
+        assert r1.observation.model_dump() == r2.observation.model_dump()
+
+    assert rewards_1 == rewards_2
