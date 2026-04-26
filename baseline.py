@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import time
+from pathlib import Path
 from typing import Literal
 
 HAS_LITELLM = None
@@ -22,6 +23,7 @@ _trained_model = None
 _trained_tokenizer = None
 TASK_EPISODE_LENGTH = {"easy": 48, "medium": 96, "hard": 96}
 FOSSIL_EMISSION_FACTOR = 0.5
+LORA_DIR = Path(os.environ.get("LORA_ADAPTER_DIR", str(Path(__file__).resolve().parent / "lora_adapter"))).resolve()
 
 
 def _get_litellm():
@@ -44,20 +46,21 @@ def load_trained_model():
     if _trained_model is not None:
         return _trained_model, _trained_tokenizer
         
-    if not os.path.exists("./lora_adapter/adapter_config.json"):
+    adapter_config_path = LORA_DIR / "adapter_config.json"
+    if not adapter_config_path.exists():
         return None, None
         
-    print("Loading LoRA adapter...")
+    print(f"Loading LoRA adapter from {LORA_DIR} ...")
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
         from peft import PeftModel
         import torch
         
-        with open("./lora_adapter/adapter_config.json", "r") as f:
+        with adapter_config_path.open("r", encoding="utf-8") as f:
             peft_config = json.load(f)
         base_model_name = peft_config.get("base_model_name_or_path", "unsloth/Qwen2.5-1.5B-Instruct")
         
-        _trained_tokenizer = AutoTokenizer.from_pretrained("./lora_adapter")
+        _trained_tokenizer = AutoTokenizer.from_pretrained(str(LORA_DIR))
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         
@@ -75,7 +78,7 @@ def load_trained_model():
                 torch_dtype=torch.float32
             )
             
-        _trained_model = PeftModel.from_pretrained(base_model, "./lora_adapter")
+        _trained_model = PeftModel.from_pretrained(base_model, str(LORA_DIR))
         print("LoRA successfully loaded!")
         return _trained_model, _trained_tokenizer
     except Exception as e:
