@@ -13,9 +13,6 @@ app_port: 7860
 
 Built for the **Theme #3: World Modeling** track (Mercor Sub-theme).
 
-📖 **[Read the Project Writeup / Blog](BLOG.md)**
-
-
 ---
 
 ## 🌍 The Problem
@@ -152,7 +149,7 @@ This saves a LoRA adapter to `./lora_adapter/` and reward curves to `./logs/`.
 
 We've deployed an interactive Streamlit dashboard allowing you to run episodes and visualize live grid state, reward curves, and carbon emissions.
 
-**[View the Live Demo on Hugging Face Spaces](https://huggingface.co/spaces/Loosebag/EcoGrid)**
+**[View the Live Demo on Hugging Face Spaces](#)** *(Link to be updated upon deployment)*
 
 ### Local Docker Build
 ```bash

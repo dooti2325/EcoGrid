@@ -22,7 +22,7 @@ class BasicGridBalanceGrader:
     @staticmethod
     def grade(episode_log: list[StepResult]) -> TaskScore:
         if not episode_log:
-            return TaskScore(task_name="easy", score=0.0, breakdown={})
+            return TaskScore(task_name="easy", score=0.001, breakdown={})
             
         total_steps = len(episode_log)
         total_reward = sum(step.reward for step in episode_log)
@@ -48,7 +48,7 @@ class BasicGridBalanceGrader:
         if avg_cost_score < 0.7:
             base_score = min(base_score, 0.6)
             
-        final_score = float(np.clip(base_score, 0.0, 1.0))
+        final_score = float(np.clip(base_score, 0.001, 0.999))
         
         breakdown = {
             "avg_reward": float(total_reward / total_steps),
@@ -74,7 +74,7 @@ class RenewableVariabilityGrader:
     @staticmethod
     def grade(episode_log: list[StepResult]) -> TaskScore:
         if not episode_log:
-            return TaskScore(task_name="medium", score=0.0, breakdown={})
+            return TaskScore(task_name="medium", score=0.001, breakdown={})
             
         # Extract averages from the reward breakdowns
         avg_renewable = np.mean([step.info["reward_breakdown"]["renewable_bonus"] for step in episode_log])
@@ -91,7 +91,7 @@ class RenewableVariabilityGrader:
         if blackout_events >= 3:
             base_score *= 0.5  # Heavy penalty for failing core objective
             
-        final_score = float(np.clip(base_score, 0.0, 1.0))
+        final_score = float(np.clip(base_score, 0.001, 0.999))
         
         breakdown = {
             "renewable_component": float(avg_renewable),
@@ -117,7 +117,7 @@ class CarbonConstrainedGrader:
     @staticmethod
     def grade(episode_log: list[StepResult]) -> TaskScore:
         if not episode_log:
-            return TaskScore(task_name="hard", score=0.0, breakdown={})
+            return TaskScore(task_name="hard", score=0.001, breakdown={})
             
         # Check fatal condition first
         min_carbon_budget = min(step.observation.carbon_budget_remaining for step in episode_log)
@@ -131,7 +131,7 @@ class CarbonConstrainedGrader:
         if min_carbon_budget < 0 or carbon_failure:
             return TaskScore(
                 task_name="hard",
-                score=0.0,
+                score=0.001,
                 breakdown={
                     "fatal_error": 1.0,
                     "min_carbon_budget": float(min_carbon_budget)
@@ -150,7 +150,7 @@ class CarbonConstrainedGrader:
         if min_stability < 0.7:
             base_score = min(base_score, 0.4)
             
-        final_score = float(np.clip(base_score, 0.0, 1.0))
+        final_score = float(np.clip(base_score, 0.001, 0.999))
         
         breakdown = {
             "carbon_component": float(avg_carbon),

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eco-grid-openenv"
+version = "1.0.0"
+description = "RL environment for sustainable energy grid management."
+authors = [
+    {name = "Team DD"}
+]
+dependencies = [
+    "openenv-core>=0.2.0",
+    "pydantic>=2.0.0",
+    "numpy>=1.24.0",
+    "streamlit>=1.30.0",
+    "plotly>=5.18.0",
+    "openai>=1.10.0",
+    "litellm>=1.0.0",
+    "rich>=13.0.0",
+    "transformers>=4.40.0",
+    "peft>=0.11.0",
+    "accelerate>=0.30.0"
+]
+requires-python = ">=3.10"
+
+[project.scripts]
+server = "server.app:main"
+
+[tool.setuptools.packages.find]
+include = ["env*", "models*", "server*"]

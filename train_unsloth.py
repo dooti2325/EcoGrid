@@ -29,15 +29,11 @@ MAX_SEQ_LENGTH = 1024
 LORA_RANK = 16
 
 
-def parse_state_from_prompt(prompt) -> dict:
-    """Extract the state JSON from the prompt string or message list."""
+def parse_state_from_prompt(prompt: str) -> dict:
+    """Extract the state JSON from the prompt string."""
     try:
-        if isinstance(prompt, list):
-            prompt_str = prompt[-1].get('content', '')
-        else:
-            prompt_str = str(prompt)
-            
-        parts = prompt_str.split("CURRENT STATE:\n")
+        # Simple extraction assuming state is in the prompt format from baseline.py
+        parts = prompt.split("CURRENT STATE:\n")
         if len(parts) > 1:
             state_text = parts[1].split("\n\nTASK:")[0]
             return json.loads(state_text)
@@ -49,24 +45,28 @@ def parse_state_from_prompt(prompt) -> dict:
 def parse_action_from_completion(completion: str) -> GridAction | None:
     """Extract and validate GridAction JSON from model completion."""
     try:
-        start_idx = completion.find('{')
-        end_idx = completion.rfind('}')
-        if start_idx != -1 and end_idx != -1:
-            json_str = completion[start_idx:end_idx+1]
-            data = json.loads(json_str)
-            return GridAction(**data)
-        return None
+        # The model might include markdown tags
+        content = completion.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+            
+        data = json.loads(content)
+        return GridAction(**data)
     except Exception:
         return None
 
 
-def format_prompt(state_dict: dict, task_name: str) -> list:
-    """Format the prompt for the model using chat template messages."""
+def format_prompt(state_dict: dict, task_name: str) -> str:
+    """Format the prompt for the model."""
+    carbon = state_dict.get("carbon_budget_remaining", 0)
     state_json = json.dumps(state_dict, indent=2)
     
-    system_msg = "You are an expert energy grid operator. Your goal is to balance renewable energy, fossil fuels, and battery storage to meet demand while minimising cost and carbon emissions."
-    
-    user_msg = f"""CURRENT STATE:
+    return f"""You are an expert energy grid operator.
+Your goal is to balance renewable energy, fossil fuels, and battery storage to meet demand while minimising cost and carbon emissions.
+
+CURRENT STATE:
 {state_json}
 
 TASK: {task_name}
@@ -80,11 +80,6 @@ Output ONLY a valid JSON object:
   "fossil_ratio": float,
   "battery_action": float
 }}"""
-
-    return [
-        {"role": "system", "content": system_msg},
-        {"role": "user", "content": user_msg}
-    ]
 
 
 def generate_training_data(num_samples: int, task: str) -> Dataset:
@@ -216,8 +211,8 @@ def main():
         num_train_epochs=args.epochs,
         per_device_train_batch_size=2,
         gradient_accumulation_steps=4,
-        max_prompt_length=1024,
-        max_completion_length=500,
+        max_prompt_length=512,
+        max_completion_length=200,
         num_generations=4, # Number of completions to generate per prompt for relative scoring
         save_steps=100,
         logging_steps=10,
